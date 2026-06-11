@@ -1225,7 +1225,7 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
             </div>
             <div id="whatif-summary" class="whatif-summary"></div>
             <div class="chart-container" style="height:240px"><canvas id="whatif-chart"></canvas></div>
-            <div class="whatif-note" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem">Genormaliseerd op 100 bij start. Het euro-verschil is een benadering: cashflows worden verondersteld aan het begin van elk kwartaal.</div>
+            <div class="whatif-note" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem">Percentages zijn cash-gewogen (zelfde methode als Lifetime Rendement): winst t.o.v. ingelegd kapitaal, met jouw stortingen gesimuleerd in het alternatief. De grafiek toont de tijdgewogen evolutie (kwartaalrendementen samengesteld, start = 100) en kan daarvan afwijken. Cashflows verondersteld aan kwartaalstart; dividenden niet meegerekend in het alternatief.</div>
           </div>
         </div>
       </div>
@@ -3360,6 +3360,7 @@ function renderWhatIf() {
   const altName = altIsMember ? _whatifSel.alt.replace('Portefeuille ', '') : _whatifSel.alt;
   const labels = [], actIdx = [], altIdx = [];
   let ai = 100, bi = 100, cfVal = null, actEnd = null, started = false;
+  let vStart0 = null, totB = 0, totS = 0, netNew = 0;
   keys.forEach(qk => {
     const qd = DATA.quarters[qk] || {};
     const mr = (qd.quarterly_returns || []).find(x => x.member === _whatifSel.member);
@@ -3369,8 +3370,10 @@ function renderWhatIf() {
     const rB = altIsMember
       ? (((qd.quarterly_returns || []).find(x => x.member === altName) || {}).return_pct || 0)
       : (((qd.benchmarks || {}).quarterly || {})[altName] || 0);
-    if (cfVal === null) cfVal = mr ? (mr.value_start || 0) : 0;
-    cfVal = (cfVal + (mr ? (mr.bought || 0) - (mr.sold || 0) : 0)) * (1 + rB);
+    if (cfVal === null) { cfVal = mr ? (mr.value_start || 0) : 0; vStart0 = cfVal; }
+    const _b = mr ? (mr.bought || 0) : 0, _s = mr ? (mr.sold || 0) : 0;
+    cfVal = (cfVal + _b - _s) * (1 + rB);
+    totB += _b; totS += _s; netNew += Math.max(_b - _s, 0);
     if (mr && mr.value_end != null) actEnd = mr.value_end;
     ai *= (1 + rA); bi *= (1 + rB);
     const p = qk.split('_');
@@ -3380,9 +3383,13 @@ function renderWhatIf() {
   const sum = document.getElementById('whatif-summary');
   const diffEur = (actEnd != null && cfVal != null) ? actEnd - cfVal : null;
   const better = diffEur != null && diffEur >= 0;
+  const lrOff = ((getQ().lifetime_returns) || []).find(x => x.member === _whatifSel.member) || {};
+  const actR = lrOff.return_pct;
+  const capBase = (vStart0 || 0) + netNew;
+  const altR = (cfVal != null && capBase > 0) ? (cfVal + totS - (vStart0 || 0) - totB) / capBase : null;
   let html =
-    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.member + ' — werkelijk</div><div class="wi-value ' + pctClass(ai - 100) + '">' + (ai >= 100 ? '+' : '') + (ai - 100).toFixed(1) + '%</div></div>' +
-    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.alt + '</div><div class="wi-value ' + pctClass(bi - 100) + '">' + (bi >= 100 ? '+' : '') + (bi - 100).toFixed(1) + '%</div></div>';
+    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.member + ' — werkelijk (lifetime)</div><div class="wi-value ' + pctClass(actR || 0) + '">' + (actR != null && actR >= 0 ? '+' : '') + pct(actR, 1) + '</div></div>' +
+    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.alt + ' — zelfde inleg</div><div class="wi-value ' + pctClass(altR || 0) + '">' + (altR != null && altR >= 0 ? '+' : '') + pct(altR, 1) + '</div></div>';
   if (diffEur != null) {
     html += '<div class="wi-stat"><div class="wi-label">Verschil vandaag</div><div class="wi-value ' + (better ? 'positive' : 'negative') + '"><span class="eur">' + (better ? '+' : '') + eur(diffEur) + '</span></div><div class="wi-sub">' + (better ? 'meer dan ' : 'minder dan ') + _whatifSel.alt + '</div></div>';
   }
