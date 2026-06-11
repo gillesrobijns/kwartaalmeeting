@@ -895,6 +895,39 @@ body.privacy-on .eur:hover { filter: none; }
 .outcome-title{font-size:13px;font-weight:800;color:var(--text)}
 .outcome-sub{font-size:11px;color:var(--text-muted)}
 
+/* == Records & Streaks == */
+.streaks-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(195px,1fr)); gap:0.6rem; }
+.streak-card { background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:0.8rem 0.9rem; display:flex; flex-direction:column; gap:4px; }
+.streak-head { display:flex; align-items:center; gap:6px; }
+.streak-emoji { font-size:1.1rem; }
+.streak-title { font-weight:700; font-size:0.74rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); }
+.streak-value { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:2.1rem; line-height:1; color:var(--text); }
+.streak-unit { font-size:0.74rem; color:var(--text-muted); }
+.streak-who { display:flex; align-items:center; gap:6px; font-weight:700; font-size:0.9rem; margin-top:2px; }
+.streak-sub { font-size:0.72rem; color:var(--text-muted); }
+
+/* == Best & worst trades == */
+.trade-row { display:flex; align-items:center; gap:10px; padding:0.55rem 0.4rem; border-bottom:1px solid var(--border); }
+.trade-row:last-child { border-bottom:none; }
+.trade-row.trade-top { background:linear-gradient(90deg, rgba(255,215,0,0.10), transparent 70%); border-radius:10px; }
+.trade-medal { font-size:1.2rem; width:28px; text-align:center; flex-shrink:0; }
+.trade-main { flex:1; min-width:0; }
+.trade-stock { font-weight:700; font-size:0.92rem; }
+.trade-sub { font-size:0.74rem; color:var(--text-muted); }
+.trade-nums { text-align:right; flex-shrink:0; }
+.trade-pct { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.3rem; line-height:1.1; }
+.trade-eur { font-size:0.74rem; color:var(--text-muted); }
+
+/* == Wat als == */
+.whatif-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:0.7rem; font-size:0.9rem; font-weight:600; color:var(--text-muted); }
+.whatif-controls select { padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-weight:700; font-size:0.85rem; cursor:pointer; }
+.whatif-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:0.6rem; margin-bottom:0.8rem; }
+.wi-stat { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.8rem; }
+.wi-label { font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; font-weight:700; }
+.wi-value { font-family:'Barlow Condensed',sans-serif; font-weight:800; font-size:1.6rem; }
+.wi-sub { font-size:0.72rem; color:var(--text-muted); }
+
+
 /* public build: mystery pill + surprise overlay + landing page */
 #meeting-landing {
   position:fixed; inset:0; z-index:3000;
@@ -1166,6 +1199,37 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
         </div>
       </div>
 
+      <!-- Best & worst trades ever -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><h3>💎 Beste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
+          <div class="card-body" id="best-trades-body"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>🧨 Slechtste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
+          <div class="card-body" id="worst-trades-body"></div>
+        </div>
+      </div>
+
+      <!-- Wat als…? -->
+      <div class="grid-1">
+        <div class="card" id="whatif-card">
+          <div class="card-header"><h3>🔮 Wat als…?</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Portefeuille vs alternatief</span></div>
+          <div class="card-body">
+            <div class="whatif-controls">
+              <span>Wat als</span>
+              <select id="whatif-member" onchange="setWhatIfMember(this.value)"></select>
+              <span>alles had belegd in</span>
+              <select id="whatif-alt" onchange="setWhatIfAlt(this.value)"></select>
+              <span>?</span>
+            </div>
+            <div id="whatif-summary" class="whatif-summary"></div>
+            <div class="chart-container" style="height:240px"><canvas id="whatif-chart"></canvas></div>
+            <div class="whatif-note" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem">Genormaliseerd op 100 bij start. Het euro-verschil is een benadering: cashflows worden verondersteld aan het begin van elk kwartaal.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- YTD + Kwartaal detail tables -->
       <div class="grid-2">
         <div class="card">
@@ -1219,6 +1283,11 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
       <div class="card" style="margin-bottom:0.6rem">
         <div class="card-header"><h3>Truiwinnaars dit kwartaal</h3></div>
         <div class="card-body" id="jersey-winners-grid"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:0.6rem">
+        <div class="card-header"><h3>Records &amp; Streaks</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Sinds oprichting</span></div>
+        <div class="card-body"><div id="records-streaks-grid" class="streaks-grid"></div></div>
       </div>
 
       <div class="card" style="margin-bottom:0.6rem">
@@ -1998,6 +2067,9 @@ function renderAll() {
   renderPointsChart(q.points || {});
   renderDividendTable(q.dividend_returns || []);
   renderPalmares();
+  renderRecordsStreaks();
+  renderBestWorstTrades();
+  renderWhatIf();
   renderHeatmap();
   initCompareMode();
   renderCompareChart();
@@ -3139,6 +3211,197 @@ function renderHeatmap() {
 }
 
 // ── Helper: sorted quarter keys ─────────────────────
+// ══════════════════════════════════════════════════
+// ── RECORDS & STREAKS / BEST-WORST TRADES / WAT ALS (June 2026) ──
+// ══════════════════════════════════════════════════
+function _qKeysUpToSelected() {
+  const keys = getSortedQuarterKeys().filter(k => DATA.quarters && DATA.quarters[k]);
+  const cur = CURRENT_QUARTER || (DATA.meta && DATA.meta.latest_quarter);
+  const idx = keys.indexOf(cur);
+  return idx >= 0 ? keys.slice(0, idx + 1) : keys;
+}
+
+function _streakStats() {
+  const keys = _qKeysUpToSelected();
+  const members = (DATA.meta && DATA.meta.members) || [];
+  const st = {};
+  members.forEach(m => st[m] = {spCur:0, spBest:0, posCur:0, posBest:0});
+  let geleCur = {member:null, len:0}, geleBest = {member:null, len:0, end:null};
+  let comeback = {member:null, delta:0, q:null, from:0, to:0};
+  let duik = {member:null, delta:0, q:null, from:0, to:0};
+  let prevRank = null;
+  keys.forEach(qk => {
+    const qd = DATA.quarters[qk] || {};
+    const sp = (qd.group_stats || {}).sp500_quarterly;
+    const qr = qd.quarterly_returns || [];
+    qr.forEach(r => {
+      const s = st[r.member]; if (!s) return;
+      if ((r.return_pct || 0) > 0) { s.posCur++; if (s.posCur > s.posBest) s.posBest = s.posCur; } else s.posCur = 0;
+      if (sp != null && (r.return_pct || 0) > sp) { s.spCur++; if (s.spCur > s.spBest) s.spBest = s.spCur; } else s.spCur = 0;
+    });
+    const gw = ((qd.jersey_winners || {})['Gele trui'] || {}).winner;
+    if (gw && gw === geleCur.member) geleCur.len++; else geleCur = {member: gw, len: gw ? 1 : 0};
+    if (geleCur.len > geleBest.len) geleBest = {member: geleCur.member, len: geleCur.len, end: qk};
+    const ranks = {};
+    [...qr].sort((a,b) => (b.return_pct||0) - (a.return_pct||0)).forEach((r,i) => ranks[r.member] = i+1);
+    if (prevRank) {
+      Object.keys(ranks).forEach(m => {
+        if (prevRank[m] == null) return;
+        const d = prevRank[m] - ranks[m];
+        if (d > comeback.delta) comeback = {member:m, delta:d, q:qk, from:prevRank[m], to:ranks[m]};
+        if (-d > duik.delta) duik = {member:m, delta:-d, q:qk, from:prevRank[m], to:ranks[m]};
+      });
+    }
+    prevRank = ranks;
+  });
+  return {st, geleBest, comeback, duik};
+}
+
+function renderRecordsStreaks() {
+  const el = document.getElementById('records-streaks-grid');
+  if (!el || !DATA) return;
+  const r = _streakStats();
+  const st = r.st;
+  const members = Object.keys(st);
+  const qLbl = qk => qk ? qk.replace('_', ' ') : '';
+  function topBy(fn) {
+    let best = 0; members.forEach(m => { if (fn(st[m]) > best) best = fn(st[m]); });
+    return {best, who: best > 0 ? members.filter(m => fn(st[m]) === best) : []};
+  }
+  function names(list) {
+    if (!list.length) return '—';
+    if (list.length <= 2) return list.join(' & ');
+    return list[0] + ' +' + (list.length - 1);
+  }
+  function avatars(list) { return list.slice(0,3).map(m => _memberAvatar(m)).join(''); }
+  const posAct = topBy(s => s.posCur), spAct = topBy(s => s.spCur);
+  const posRec = topBy(s => s.posBest), spRec = topBy(s => s.spBest);
+  const lastQ = qLbl(_qKeysUpToSelected().slice(-1)[0]);
+  const cards = [
+    {e:'🔥', t:'Hete hand', who:posAct.who, v:posAct.best, unit:'kwartalen op rij positief', sub:'Actieve reeks t/m ' + lastQ},
+    {e:'🎯', t:'Indexkiller', who:spAct.who, v:spAct.best, unit:'kwartalen op rij beter dan S&P 500', sub:'Actieve reeks t/m ' + lastQ},
+    {e:'📈', t:'Groene reeks — record', who:posRec.who, v:posRec.best, unit:'kwartalen op rij positief', sub:'Beste reeks ooit'},
+    {e:'🏆', t:'S&P-streak — record', who:spRec.who, v:spRec.best, unit:'kwartalen op rij boven de index', sub:'Beste reeks ooit'},
+    {e:'🟡', t:'Gele trui-dominantie', who:r.geleBest.member ? [r.geleBest.member] : [], v:r.geleBest.len, unit:'kwartalen op rij de gele trui', sub:r.geleBest.end ? 'Langste reeks, t/m ' + qLbl(r.geleBest.end) : ''},
+    {e:'🚀', t:'Grootste comeback', who:r.comeback.member ? [r.comeback.member] : [], v:r.comeback.delta > 0 ? '+' + r.comeback.delta : '—', unit:'plaatsen geklommen in één kwartaal', sub:r.comeback.q ? '#' + r.comeback.from + ' → #' + r.comeback.to + ' in ' + qLbl(r.comeback.q) : ''},
+    {e:'🪂', t:'Diepste val', who:r.duik.member ? [r.duik.member] : [], v:r.duik.delta > 0 ? '−' + r.duik.delta : '—', unit:'plaatsen gezakt in één kwartaal', sub:r.duik.q ? '#' + r.duik.from + ' → #' + r.duik.to + ' in ' + qLbl(r.duik.q) : ''},
+  ];
+  el.innerHTML = cards.map(c =>
+    '<div class="streak-card">' +
+      '<div class="streak-head"><span class="streak-emoji">' + c.e + '</span><span class="streak-title">' + c.t + '</span></div>' +
+      '<div class="streak-value">' + c.v + '</div>' +
+      '<div class="streak-unit">' + c.unit + '</div>' +
+      '<div class="streak-who">' + avatars(c.who) + '<span>' + names(c.who) + '</span></div>' +
+      (c.sub ? '<div class="streak-sub">' + c.sub + '</div>' : '') +
+    '</div>'
+  ).join('');
+}
+
+// ── Best & worst trades ever ─────────────────────
+function _allSoldTrades() {
+  const out = [];
+  _qKeysUpToSelected().forEach(qk => {
+    ((DATA.quarters[qk] || {}).sold_positions || []).forEach(s => {
+      if (Math.abs(s.cost_basis_eur || 0) < 50) return;
+      const o = Object.assign({}, s); o.qk = qk; out.push(o);
+    });
+  });
+  return out;
+}
+
+function renderBestWorstTrades() {
+  const bestEl = document.getElementById('best-trades-body');
+  const worstEl = document.getElementById('worst-trades-body');
+  if (!bestEl || !worstEl || !DATA) return;
+  const all = _allSoldTrades().sort((a,b) => (b.return_pct||0) - (a.return_pct||0));
+  const bestMedals = ['🥇','🥈','🥉'];
+  const worstMedals = ['💀','🥶','😬'];
+  function row(t, i, medals) {
+    let dLbl = t.qk.replace('_',' ');
+    if (t.date) {
+      const d = new Date(String(t.date).replace(' ','T'));
+      if (!isNaN(d)) dLbl = d.toLocaleDateString('nl-BE', {month:'short', year:'numeric'});
+    }
+    const g = t.gain_eur || 0;
+    return '<div class="trade-row' + (i === 0 ? ' trade-top' : '') + '">' +
+      '<div class="trade-medal">' + (medals[i] || '') + '</div>' +
+      _stockAvatar(t.stock) +
+      '<div class="trade-main"><div class="trade-stock">' + t.stock + '</div>' +
+      '<div class="trade-sub">' + t.member + ' · verkocht ' + dLbl + '</div></div>' +
+      '<div class="trade-nums"><div class="trade-pct ' + pctClass(t.return_pct||0) + '">' + (t.return_pct >= 0 ? '+' : '') + pct(t.return_pct) + '</div>' +
+      '<div class="trade-eur eur">' + (g >= 0 ? '+' : '') + eur(g) + '</div></div>' +
+    '</div>';
+  }
+  const empty = '<p style="color:var(--text-muted);text-align:center;padding:1rem 0">Nog geen verkochte posities</p>';
+  bestEl.innerHTML = all.slice(0,3).map((t,i) => row(t,i,bestMedals)).join('') || empty;
+  worstEl.innerHTML = all.slice(-3).reverse().map((t,i) => row(t,i,worstMedals)).join('') || empty;
+}
+
+// ── Wat als…? ────────────────────────────────────
+let _whatifSel = {member: null, alt: 'S&P 500'};
+function setWhatIfMember(v) { _whatifSel.member = v; renderWhatIf(); }
+function setWhatIfAlt(v) { _whatifSel.alt = v; renderWhatIf(); }
+
+function renderWhatIf() {
+  const card = document.getElementById('whatif-card');
+  if (!card || !DATA) return;
+  if (_charts['whatif']) { try { _charts['whatif'].destroy(); } catch(e){} delete _charts['whatif']; }
+  const members = (DATA.meta && DATA.meta.members) || [];
+  if (!members.length) return;
+  if (!_whatifSel.member || !members.includes(_whatifSel.member)) _whatifSel.member = members[0];
+  const keys = _qKeysUpToSelected();
+  const bmNames = [];
+  keys.forEach(qk => Object.keys(((DATA.quarters[qk]||{}).benchmarks||{}).quarterly||{}).forEach(b => { if (!bmNames.includes(b)) bmNames.push(b); }));
+  const altOptions = bmNames.concat(members.filter(m => m !== _whatifSel.member).map(m => 'Portefeuille ' + m));
+  if (!altOptions.includes(_whatifSel.alt)) _whatifSel.alt = altOptions[0];
+  document.getElementById('whatif-member').innerHTML = members.map(m => '<option' + (m === _whatifSel.member ? ' selected' : '') + '>' + m + '</option>').join('');
+  document.getElementById('whatif-alt').innerHTML = altOptions.map(a => '<option' + (a === _whatifSel.alt ? ' selected' : '') + '>' + a + '</option>').join('');
+  const altIsMember = _whatifSel.alt.indexOf('Portefeuille ') === 0;
+  const altName = altIsMember ? _whatifSel.alt.replace('Portefeuille ', '') : _whatifSel.alt;
+  const labels = [], actIdx = [], altIdx = [];
+  let ai = 100, bi = 100, cfVal = null, actEnd = null, started = false;
+  keys.forEach(qk => {
+    const qd = DATA.quarters[qk] || {};
+    const mr = (qd.quarterly_returns || []).find(x => x.member === _whatifSel.member);
+    if (!mr && !started) return;
+    started = true;
+    const rA = mr ? (mr.return_pct || 0) : 0;
+    const rB = altIsMember
+      ? (((qd.quarterly_returns || []).find(x => x.member === altName) || {}).return_pct || 0)
+      : (((qd.benchmarks || {}).quarterly || {})[altName] || 0);
+    if (cfVal === null) cfVal = mr ? (mr.value_start || 0) : 0;
+    cfVal = (cfVal + (mr ? (mr.bought || 0) - (mr.sold || 0) : 0)) * (1 + rB);
+    if (mr && mr.value_end != null) actEnd = mr.value_end;
+    ai *= (1 + rA); bi *= (1 + rB);
+    const p = qk.split('_');
+    labels.push(p[0] + " '" + p[1].slice(2));
+    actIdx.push(+ai.toFixed(1)); altIdx.push(+bi.toFixed(1));
+  });
+  const sum = document.getElementById('whatif-summary');
+  const diffEur = (actEnd != null && cfVal != null) ? actEnd - cfVal : null;
+  const better = diffEur != null && diffEur >= 0;
+  let html =
+    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.member + ' — werkelijk</div><div class="wi-value ' + pctClass(ai - 100) + '">' + (ai >= 100 ? '+' : '') + (ai - 100).toFixed(1) + '%</div></div>' +
+    '<div class="wi-stat"><div class="wi-label">' + _whatifSel.alt + '</div><div class="wi-value ' + pctClass(bi - 100) + '">' + (bi >= 100 ? '+' : '') + (bi - 100).toFixed(1) + '%</div></div>';
+  if (diffEur != null) {
+    html += '<div class="wi-stat"><div class="wi-label">Verschil vandaag</div><div class="wi-value ' + (better ? 'positive' : 'negative') + '"><span class="eur">' + (better ? '+' : '') + eur(diffEur) + '</span></div><div class="wi-sub">' + (better ? 'meer dan ' : 'minder dan ') + _whatifSel.alt + '</div></div>';
+  }
+  sum.innerHTML = html;
+  const mc = (typeof MEMBER_COLORS !== 'undefined' && MEMBER_COLORS[_whatifSel.member]) || '#1B2A4A';
+  _charts['whatif'] = new Chart(document.getElementById('whatif-chart'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: _whatifSel.member, data: actIdx, borderColor: mc, backgroundColor: 'transparent', borderWidth: 3, pointRadius: 0, tension: 0.25 },
+      { label: _whatifSel.alt, data: altIdx, borderColor: '#D4A017', borderDash: [6,4], backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, tension: 0.25 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: chartTextColor(), font: { weight: '700' }, boxWidth: 18 } } },
+      scales: { x: { grid: { display: false }, ticks: { color: chartMutedColor(), maxRotation: 0, autoSkip: true, font: { size: 10 } } },
+                y: { grid: { color: chartGridColor() }, ticks: { color: chartMutedColor() } } },
+      animation: { duration: 500 } }
+  });
+}
+
 function getSortedQuarterKeys() {
   return (DATA.meta.available_quarters || Object.keys(DATA.quarters||{}))
     .sort((a,b) => {
