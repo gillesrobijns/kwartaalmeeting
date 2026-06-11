@@ -499,6 +499,7 @@ body {
 /* ── Responsive ──────────────────────────────── */
 /* ── Mobile (≤900px): topbar + off-canvas drawer ── */
 .mobile-topbar, .mobile-backdrop { display: none; }
+.m-sub { display: none; }
 
 @media (max-width: 900px) {
   /* Fixed topbar with hamburger */
@@ -552,7 +553,10 @@ body {
   /* Tables scroll horizontally inside their card */
   .card { overflow-x: auto; }
   .card canvas { max-width: 100%; }
-  .card table { min-width: 520px; }
+  .card table { min-width: 0; }
+  #palmares-container table { min-width: 520px; }
+  td.stat-cell { min-width: 86px; }
+  #overview-ranking td:nth-child(4), #overview-ranking th:nth-child(4) { min-width: 110px; }
 
   /* Member subnav pills scroll horizontally */
   .member-subnav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -590,6 +594,56 @@ body {
   /* Klassementen tabs: one line, horizontally scrollable */
   .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tab { white-space: nowrap; flex: none; }
+
+  /* Fit-to-width rows: secondary values as sub-label under the name */
+  .m-sub { display: block; font-size: 0.62rem; color: var(--text-muted); margin-top: 1px;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+  #ytd-table td:nth-child(3), #ytd-table th:nth-child(3),
+  #ytd-table td:nth-child(4), #ytd-table th:nth-child(4),
+  #quarterly-detail-table td:nth-child(3), #quarterly-detail-table th:nth-child(3),
+  #quarterly-detail-table td:nth-child(4), #quarterly-detail-table th:nth-child(4),
+  #quarterly-detail-table td:nth-child(5), #quarterly-detail-table th:nth-child(5),
+  #dividend-table td:nth-child(3), #dividend-table th:nth-child(3) { display: none; }
+
+  /* Stock tables: rows restack into cards (no horizontal scroll) */
+  .m-cards { min-width: 0 !important; }
+  .m-cards thead { display: none; }
+  .m-cards, .m-cards tbody { display: block; width: 100%; }
+  .m-cards tr { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px;
+                padding: 0.55rem 0.15rem; border-bottom: 1px solid var(--border); }
+  .m-cards td { display: block; border-bottom: none; padding: 0; }
+  .m-cards td.stat-cell { min-width: 0; }
+  .m-cards td[colspan] { grid-column: 1 / -1; }
+  .m-cards td::before { display: block; font-size: 0.55rem; font-weight: 600; text-transform: uppercase;
+                        letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 1px; }
+
+  #all-stocks-table td:nth-child(1):not([colspan]) { display: none; }
+  #all-stocks-table td:nth-child(2) { grid-column: 1 / -1; }
+  #all-stocks-table td:nth-child(3) { grid-row: 2; grid-column: 1; align-self: center; }
+  #all-stocks-table td:nth-child(4) { grid-row: 2; grid-column: 2; justify-self: end; }
+  #all-stocks-table td:nth-child(5) { grid-row: 3; grid-column: 1; }
+  #all-stocks-table td:nth-child(6) { grid-row: 3; grid-column: 2; }
+  #all-stocks-table td:nth-child(5)::before { content: 'Dit kwartaal'; }
+  #all-stocks-table td:nth-child(6)::before { content: 'Totaal'; }
+
+  #member-stocks-overview-table td:nth-child(1):not([colspan]) { display: none; }
+  #member-stocks-overview-table td:nth-child(2) { grid-column: 1 / -1; }
+  #member-stocks-overview-table td:nth-child(3) { grid-row: 2; grid-column: 1; align-self: center; }
+  #member-stocks-overview-table td:nth-child(4) { grid-row: 2; grid-column: 2; justify-self: end; text-align: right; }
+  #member-stocks-overview-table td:nth-child(5) { grid-row: 3; grid-column: 1; }
+  #member-stocks-overview-table td:nth-child(6) { grid-row: 3; grid-column: 2; }
+  #member-stocks-overview-table td:nth-child(5)::before { content: 'Kwartaal'; }
+  #member-stocks-overview-table td:nth-child(6)::before { content: 'Totaal'; }
+
+  #member-sold-table td:nth-child(1) { grid-column: 1 / -1; }
+  #member-sold-table td:nth-child(2) { grid-row: 2; grid-column: 1; align-self: center; }
+  #member-sold-table td:nth-child(5) { grid-row: 2; grid-column: 2; justify-self: end; text-align: right; }
+  #member-sold-table td:nth-child(3) { grid-row: 3; grid-column: 1; text-align: left; }
+  #member-sold-table td:nth-child(4) { grid-row: 3; grid-column: 2; justify-self: end; text-align: right; }
+  #member-sold-table td:nth-child(6) { grid-row: 4; grid-column: 1 / -1; }
+  #member-sold-table td:nth-child(3)::before { content: 'Kostprijs'; }
+  #member-sold-table td:nth-child(4)::before { content: 'Verkoop'; }
+  #member-sold-table td:nth-child(5)::before { content: 'Winst'; }
 }
 
 @media (max-width: 400px) {
@@ -1146,7 +1200,7 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
             style="font-size:0.76rem;padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg);color:var(--text);outline:none;min-width:150px">
         </div>
         <div class="card-body" style="padding:0.3rem 1rem;overflow-x:auto">
-          <table class="data-table stock-table" id="all-stocks-table">
+          <table class="data-table stock-table m-cards" id="all-stocks-table">
             <thead><tr>
               <th style="width:28px">#</th>
               <th onclick="_asSort('stock')" style="cursor:pointer;user-select:none;font-size:0.70rem;letter-spacing:0.06em">AANDEEL ↕</th>
@@ -1250,7 +1304,7 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
                 style="font-size:0.76rem;padding:3px 9px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg);color:var(--text);outline:none;min-width:130px">
             </div>
             <div class="card-body" style="padding:0.3rem 1rem;overflow-x:auto">
-              <table class="data-table" id="member-stocks-overview-table" style="width:100%">
+              <table class="data-table m-cards" id="member-stocks-overview-table" style="width:100%">
                 <thead><tr>
                   <th style="width:28px">#</th>
                   <th id="mso-th-stock"  onclick="_msoSort('stock')"  style="cursor:pointer">Aandeel</th>
@@ -1299,7 +1353,7 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
         <div class="card">
           <div class="card-header"><h3>Verkochte Posities <span style="font-size:0.7rem;font-weight:400;color:var(--text-muted);margin-left:6px;">rendement t.o.v. aankoopprijs</span></h3></div>
           <div class="card-body">
-            <table class="data-table" id="member-sold-table">
+            <table class="data-table m-cards" id="member-sold-table">
               <thead><tr><th>Aandeel</th><th>Sector</th><th class="right">Kostprijs</th><th class="right">Verkoop</th><th class="right">Winst</th><th class="right">Rendement</th></tr></thead>
               <tbody></tbody>
             </table>
@@ -2092,7 +2146,8 @@ function renderYTDTable(ret) {
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+(i+1)+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
-        '<div class="stock-name">'+r.member+'</div></div></td>' +
+        '<div><div class="stock-name">'+r.member+'</div>'+
+        '<div class="m-sub eur">'+eur(r.value_start)+' → '+eur(r.value_end)+'</div></div></div></td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_start)+'</td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_end)+'</td>' +
       _statBar(r.return_pct, maxV) +
@@ -2109,7 +2164,8 @@ function renderQuarterlyDetail(ret) {
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+(i+1)+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
-        '<div class="stock-name">'+r.member+'</div></div></td>' +
+        '<div><div class="stock-name">'+r.member+'</div>'+
+        '<div class="m-sub eur">'+eur(r.value_start)+' · koop '+eur(r.bought)+' · verkoop '+eur(r.sold)+'</div></div></div></td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_start)+'</td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.bought)+'</td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.sold)+'</td>' +
@@ -2422,7 +2478,8 @@ function renderDividendTable(divs) {
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+(i+1)+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
-        '<div class="stock-name">'+r.member+'</div></div></td>' +
+        '<div><div class="stock-name">'+r.member+'</div>'+
+        '<div class="m-sub eur">'+eur(r.dividends_eur)+'</div></div></div></td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.dividends_eur)+'</td>' +
       _statBar(r.dividend_return_pct, maxD) +
       '</tr>';
@@ -2992,8 +3049,8 @@ function renderMemberPage(name) {
     const totCls = pctClass(totRet);
     rows.push('<tr style="border-top:2px solid var(--navy);font-weight:700">'+
       '<td>Totaal ('+sold.length+' verkopen)</td><td></td>'+
-      '<td class="right eur">'+eur(totSale)+'</td>'+
       '<td class="right eur">'+eur(totCost)+'</td>'+
+      '<td class="right eur">'+eur(totSale)+'</td>'+
       '<td class="right mono eur '+totCls+'">'+eur(totGain)+'</td>'+
       '<td class="right mono '+totCls+'">'+pct(totRet)+'</td>'+
       '<td></td></tr>');
