@@ -2407,10 +2407,15 @@ function renderLifetimeChart(ret) {
   const vals    = sorted.map(r => +(r.return_pct * 100).toFixed(2));
   const colors  = vals.map(v => v >= 0 ? '#2E8B57' : '#DC143C');
 
-  // Compute cash-weighted S&P + tooltip analytics per member
+  // Pre-compute global S&P cumulative from club start (Q1 2022) — used for timing narratives
   const keys = _qKeysUpToSelected();
+  const _gspCum = {};
+  { let _g = 1.0; for (const qk of keys) { _g *= (1 + ((DATA.quarters[qk]?.group_stats?.sp500_quarterly) || 0)); _gspCum[qk] = +((_g-1)*100).toFixed(1); } }
+
+  // Compute cash-weighted S&P + per-member timing analytics
   const cwData = sorted.map(({ member, return_pct }) => {
     let cfVal = null, vStart0 = null, totB = 0, totS = 0, netNew = 0, spTW = 1.0;
+    const buys = [];
     for (const qk of keys) {
       const qd = DATA.quarters[qk] || {};
       const mr = (qd.quarterly_returns || []).find(x => x.member === member);
@@ -2421,14 +2426,21 @@ function renderLifetimeChart(ret) {
       cfVal = (cfVal + _b - _s) * (1 + spQ);
       spTW *= (1 + spQ);
       totB += _b; totS += _s; netNew += Math.max(_b - _s, 0);
+      if (_b > 200) buys.push({ label: qk.replace('_',' '), amount: _b, spLevel: _gspCum[qk] || 0 });
     }
     const capBase = (vStart0 || 0) + netNew;
     const cw  = capBase > 0 ? +((cfVal + totS - (vStart0 || 0) - totB) / capBase * 100).toFixed(2) : null;
     const tw  = +((spTW - 1) * 100).toFixed(2);
-    const actual = +(return_pct * 100).toFixed(2);
+    const actual    = +(return_pct * 100).toFixed(2);
     const timingBonus = cw !== null ? +(cw - tw).toFixed(1) : 0;
     const alpha       = cw !== null ? +(actual - cw).toFixed(1) : 0;
-    return { cw, tw, timingBonus, alpha, actual };
+    // Top buys by amount; cheapest buys by S&P level
+    const topBuys  = [...buys].sort((a,b) => b.amount - a.amount).slice(0, 2);
+    const lowBuys  = [...buys].sort((a,b) => a.spLevel - b.spLevel).slice(0, 2);
+    const wSum = buys.reduce((s,b) => s + b.amount * b.spLevel, 0);
+    const wTot = buys.reduce((s,b) => s + b.amount, 0);
+    const avgEntrySp = wTot > 0 ? +(wSum / wTot).toFixed(1) : null;
+    return { cw, tw, timingBonus, alpha, actual, topBuys, lowBuys, avgEntrySp, capBase };
   });
   const sp500cw = cwData.map(d => d.cw);
 
@@ -2446,18 +2458,53 @@ function renderLifetimeChart(ret) {
             afterLabel: ctx => {
               const d = cwData[ctx.dataIndex];
               if (!d || d.cw === null) return '';
+              const fmt  = n => '€ ' + Math.round(n).toLocaleString('nl-NL');
+              const spFmt = n => (n >= 0 ? '+' : '') + n.toFixed(0) + '%';
               const lines = ['S&P 500 (zelfde inleg): ' + d.cw.toFixed(2) + '%'];
-              // Alpha verdict
-              const absAlpha = Math.abs(d.alpha);
+
+              // 1. Alpha verdict
               if (d.alpha >= 5)        lines.push('✓ ' + d.alpha.toFixed(1) + '% boven S&P — jouw selectie won het');
-              else if (d.alpha >= 1)   lines.push('≈ ' + d.alpha.toFixed(1) + '% boven S&P — net beter dan de markt');
-              else if (d.alpha >= -3)  lines.push('≈ Marktconform resultaat (' + (d.alpha > 0 ? '+' : '') + d.alpha.toFixed(1) + '%)');
-              else                     lines.push('↓ ' + absAlpha.toFixed(1) + '% onder de markt');
-              // Timing context
-              if (d.timingBonus >= 8)
-                lines.push('Je kocht overwegend laag → S&P-benchmark ligt ' + d.timingBonus.toFixed(0) + '% boven tijdgewogen index');
-              else if (d.timingBonus <= -5)
-                lines.push('Je kocht overwegend hoog → S&P-benchmark ligt ' + Math.abs(d.timingBonus).toFixed(0) + '% onder tijdgewogen index');
+              else if (d.alpha >= 1)   lines.push('≈ Net boven S&P (+' + d.alpha.toFixed(1) + '%)');
+              else if (d.alpha >= -3)  lines.push('≈ Marktconform resultaat (' + (d.alpha>0?'+':'') + d.alpha.toFixed(1) + '%)');
+              else                     lines.push('↓ ' + Math.abs(d.alpha).toFixed(1) + '% onder de markt');
+
+              // 2. Personalized timing narrative
+              const top = d.topBuys[0], top2 = d.topBuys[1];
+              const cheap = d.lowBuys[0], cheap2 = d.lowBuys[1];
+              const pct = top ? Math.round(top.amount / d.capBase * 100) : 0;
+
+              if (top && top.spLevel < -10 && top2 && top2.spLevel < -5) {
+                // Both heaviest buys were in the crash — Robbe-type
+                const p2 = Math.round(top2.amount / d.capBase * 100);
+                lines.push('Je kocht zwaar in tijdens de crash: ' + fmt(top.amount) + ' in ' + top.label + ' (S&P ' + spFmt(top.spLevel) + ') en ' + fmt(top2.amount) + ' in ' + top2.label + ' (S&P ' + spFmt(top2.spLevel) + ')');
+                lines.push('Samen ' + (pct + p2) + '% van je kapitaal — die inleg compoundde door het volledige herstel daarna');
+
+              } else if (top && top.spLevel < -10) {
+                // Single big crash buy
+                lines.push('Grootste inleg ' + fmt(top.amount) + ' (' + pct + '% van kapitaal) in ' + top.label + ', toen S&P op ' + spFmt(top.spLevel) + ' stond');
+                if (d.timingBonus >= 8) lines.push('Die timing compoundde door het volledige herstel van 2023–2026');
+
+              } else if (top && top.spLevel > 25) {
+                // Biggest buy was when market was already high — Kevin/Pieter-type
+                lines.push('Grootste inleg ' + fmt(top.amount) + ' (' + pct + '%) in ' + top.label + ', S&P stond al op ' + spFmt(top.spLevel));
+                if (d.alpha > 5)       lines.push('Je picks compenseerden die late instap ruimschoots');
+                else if (d.alpha < -5) lines.push('Combinatie van late instap én matige selectie drukte het resultaat');
+                else                   lines.push('De late instap beperkt de benchmark — picks waren marktconform');
+
+              } else if (d.timingBonus >= 8 && cheap && cheap.spLevel < -5) {
+                // Good timing overall — early cheap buys drove it — Niels-type
+                const p2 = cheap2 ? ' en ' + fmt(cheap2.amount) + ' in ' + cheap2.label + ' (S&P ' + spFmt(cheap2.spLevel) + ')' : '';
+                lines.push('Vroege stortingen op gunstige momenten: ' + fmt(cheap.amount) + ' in ' + cheap.label + ' (S&P ' + spFmt(cheap.spLevel) + ')' + p2);
+                lines.push('Die vroege inleg zorgde voor de hoge S&P-benchmark ondanks latere stortingen');
+
+              } else if (d.avgEntrySp !== null && d.avgEntrySp < -3) {
+                lines.push('Gemiddeld ingestapt toen S&P op ' + spFmt(d.avgEntrySp) + ' stond — gunstige timing');
+
+              } else if (d.avgEntrySp !== null && d.avgEntrySp > 15) {
+                lines.push('Gemiddeld ingestapt toen S&P al op ' + spFmt(d.avgEntrySp) + ' stond');
+                if (d.alpha > 0) lines.push('Je selectie maakte dat goed');
+              }
+
               return lines;
             }
           }
@@ -4577,70 +4624,4 @@ function _buildPipelineUI(label) {
   const area = document.getElementById('sync-pipeline-area'); if(!area) return;
   const stepsHtml = _PIPELINE_STEPS.map((s,i)=>'<div class="sync-step step-pending" id="sync-step-'+i+'"><div class="step-icon">'+(i+1)+'</div><div style="flex:1;min-width:0"><div class="step-label">'+s.icon+' '+s.label+'</div><div class="step-detail" id="step-detail-'+i+'"></div></div><div class="step-time" id="step-time-'+i+'"></div></div>').join('');
   area.innerHTML = '<div class="sync-steps" id="sync-steps">'+stepsHtml+'</div>'
-    +'<div class="sync-term"><div class="sync-term-bar"><div class="sync-term-dots"><div class="sync-term-dot" style="background:#ff5f56"></div><div class="sync-term-dot" style="background:#ffbd2e"></div><div class="sync-term-dot" style="background:#27c93f"></div></div><div class="sync-term-title">'+label+'</div></div><div class="sync-term-body" id="sync-term-lines"></div></div>'
-    +'<div id="sync-outcome-area"></div>';
-  _stepTimers={};
-}
-
-function _setStep(i,state,detail) {
-  const el=document.getElementById('sync-step-'+i); if(!el) return;
-  el.className='sync-step step-'+state;
-  const icon=el.querySelector('.step-icon');
-  if(state==='active'){icon.textContent='◌';if(!_stepTimers[i])_stepTimers[i]=Date.now();}
-  else if(state==='done'){icon.textContent='✓';if(_stepTimers[i]){const t=document.getElementById('step-time-'+i);if(t)t.textContent=((Date.now()-_stepTimers[i])/1000).toFixed(1)+'s';}}
-  else if(state==='error'){icon.textContent='✕';}
-  if(detail){const d=document.getElementById('step-detail-'+i);if(d)d.textContent=detail;}
-}
-
-function _updateStepsFromLine(line) {
-  for(let i=0;i<_PIPELINE_STEPS.length;i++){
-    if(_PIPELINE_STEPS[i].match.test(line)){
-      if(_currentStep>=0&&_currentStep<i) _setStep(_currentStep,'done');
-      if(i>_currentStep){_currentStep=i;_setStep(i,'active');}
-      return;
-    }
-  }
-  if(_currentStep>=0&&line.trim()&&!line.startsWith('=')){const d=document.getElementById('step-detail-'+_currentStep);if(d)d.textContent=line.trim().substring(0,80);}
-}
-
-function _pollJobThen(jobId, callback) {
-  if(_pollTimer) clearInterval(_pollTimer);
-  let seen=0, hasError=false;
-  _pollTimer=setInterval(async function(){
-    try{
-      const r=await fetch(_SYNC_URL+'/job/'+jobId);
-      const job=await r.json();
-      (job.lines||[]).slice(seen).forEach(function(l){
-        const isErr=/error|failed|fout/i.test(l)&&!/sanity|warning|mismatch/i.test(l);
-        const isOk=l.includes('Done!')||/Standalone.*built/i.test(l);
-        const isDim=l.startsWith('===')||l.trim()==='';
-        const isWarn=/warning|\u26a0/i.test(l);
-        if(isErr) hasError=true;
-        _allLines.push(l); _updateStepsFromLine(l);
-        _appendSyncLine(l,isErr?'err':isOk?'ok':isDim?'dim':isWarn?'warn':'');
-      });
-      seen=(job.lines||[]).length;
-      if(job.status!=='running'){clearInterval(_pollTimer);_pollTimer=null;callback(job.status==='done'&&!hasError);}
-    } catch(e){clearInterval(_pollTimer);_pollTimer=null;callback(false);}
-  },800);
-}
-
-function _appendSyncLine(text,type) {
-  const el=document.getElementById('sync-term-lines'); if(!el||!text.trim()) return;
-  const d=document.createElement('div');
-  d.className='sync-term-line'+(type?' sync-term-'+type:'');
-  d.textContent=text; el.appendChild(d); el.scrollTop=el.scrollHeight;
-}
-
-function _endSync(success) {
-  _syncRunning=false; _queueRunning=false;
-  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}
-  const sb=document.querySelector('.sync-btn'); if(sb) sb.classList.remove('syncing');
-  if(success){for(let i=0;i<_PIPELINE_STEPS.length;i++) _setStep(i,'done');}
-  else{if(_currentStep>=0) _setStep(_currentStep,'error');}
-  const oa=document.getElementById('sync-outcome-area');
-  if(oa){
-    if(success){
-      const jerseys={}; const emojis={'Gele trui':'🟡','Etappeprijs':'🟢','Strijdlust':'🔴','Rode lantaarn':'🟠','Witte trui':'⚪'};
-      _allLines.forEach(function(l){const m=l.match(/^\s{2,4}([\w][\w\s]+):\s+(\w+)\s+\(([+-]?[\d.]+)%/);if(m)jerseys[m[1].trim()]={winner:m[2],emoji:emojis[m[1].trim()]||'🏅'};});
-      const jHtml=Object.entries(jerseys).slice(0,5).map(function(e){return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--card-bg);border:1px solid var(--border);border-radius:20px;pa
+    +'<div class="sync-term"><div class="sync-term-bar"><div class="sync-term-dots"><div class="sync-term-dot" style="background:#ff5f56"></div><div class="sync-term-dot" style="background:#ffbd2e"></div><div class="sync-term-dot" style="background:#27c93f"></div></div><div class="sync-term-title">'+label+'</div></div><div class="sync-term-body" id="sync-term-lines"></div></div
