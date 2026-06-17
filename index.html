@@ -1055,12 +1055,12 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
     <div class="sidebar-section">
       <div class="sidebar-section-title">Navigatie</div>
       <ul class="sidebar-nav" id="main-nav">
-        <li><a class="active" onclick="showPage('overview')" data-page="overview"><span class="nav-icon">&#9776;</span> <span id="nav-overview-label">Kwartaaloverzicht</span></a></li>
-        <li><a onclick="showPage('returns')" data-page="returns"><span class="nav-icon">&#9650;</span> Rendementen</a></li>
-        <li><a onclick="showPage('stocks')" data-page="stocks"><span class="nav-icon">&#9733;</span> Aandelen</a></li>
-        <li><a onclick="showPage('jerseys')" data-page="jerseys"><span class="nav-icon">&#127941;</span> Truien & Punten</a></li>
-        <li><a onclick="showPage('kamelenrace')" data-page="kamelenrace"><span class="nav-icon">&#128042;</span> Kamelenrace</a></li>
-        <li><a onclick="showPage('uitleg')" data-page="uitleg"><span class="nav-icon">&#8505;</span> Hoe werkt het?</a></li>
+        <li><a class="active" onclick="showPage('stand')" data-page="stand"><span class="nav-icon">&#127942;</span> Stand</a></li>
+        <li><a onclick="showPage('kwartaal')" data-page="kwartaal"><span class="nav-icon">&#128197;</span> Kwartaal</a></li>
+        <li><a onclick="showPage('lifetime')" data-page="lifetime"><span class="nav-icon">&#9650;</span> Lifetime</a></li>
+        <li><a onclick="showPage('portfolio')" data-page="portfolio"><span class="nav-icon">&#9733;</span> Portfolio</a></li>
+        <li><a onclick="showPage('club')" data-page="club"><span class="nav-icon">&#127941;</span> Club</a></li>
+        <li><a onclick="showPage('info')" data-page="info"><span class="nav-icon">&#8505;</span> Info</a></li>
       </ul>
     </div>
 
@@ -1129,14 +1129,14 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
 <!-- ═══ MAIN ═══ -->
 <div class="main">
   <div class="page-header">
-    <h2 id="page-title">Overzicht</h2>
+    <h2 id="page-title">Stand</h2>
     <span class="date-info" id="date-info"></span>
   </div>
 
   <div class="page-content">
 
-    <!-- ─── PAGE: Overview ─── -->
-    <div class="page-section active" id="page-overview">
+    <!-- ─── PAGE: Stand ─── -->
+    <div class="page-section active" id="page-stand">
       <div class="kpi-row" id="kpi-row"></div>
 
       <div class="grid-1">
@@ -1177,9 +1177,8 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
       </div>
     </div>
 
-    <!-- ─── PAGE: Returns ─── -->
-    <div class="page-section" id="page-returns">
-
+    <!-- ─── PAGE: Kwartaal ─── -->
+    <div class="page-section" id="page-kwartaal">
       <!-- HERO: Heatmap first -->
       <div class="grid-1">
         <div class="card">
@@ -1200,54 +1199,6 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
         <div class="card" id="compare-chart-card" style="display:none">
           <div class="card-body" style="padding:0.5rem 1rem">
             <div class="chart-container" style="height:200px"><canvas id="compare-chart"></canvas></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Lifetime chart -->
-      <div class="grid-1">
-        <div class="card">
-          <div class="card-header">
-            <h3>Lifetime Rendement</h3>
-            <span class="badge" style="background:var(--bg);color:var(--text-muted)">Cumulatief vanaf dag één</span>
-          </div>
-          <div class="card-body">
-            <div class="chart-container" style="height:280px"><canvas id="lifetime-chart"></canvas></div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted)">
-              <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#D4A017" stroke-width="2" stroke-dasharray="4,3"/><polygon points="12,1 16,5 12,9 8,5" fill="#D4A017"/></svg>
-              S&amp;P 500 (zelfde inleg) — individueel per lid berekend
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Best & worst trades ever -->
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header"><h3>💎 Beste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
-          <div class="card-body" id="best-trades-body"></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h3>🧨 Slechtste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
-          <div class="card-body" id="worst-trades-body"></div>
-        </div>
-      </div>
-
-      <!-- Wat als…? -->
-      <div class="grid-1">
-        <div class="card" id="whatif-card">
-          <div class="card-header"><h3>🔮 Wat als…?</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Portefeuille vs alternatief</span></div>
-          <div class="card-body">
-            <div class="whatif-controls">
-              <span>Wat als</span>
-              <select id="whatif-member" onchange="setWhatIfMember(this.value)"></select>
-              <span>alles had belegd in</span>
-              <select id="whatif-alt" onchange="setWhatIfAlt(this.value)"></select>
-              <span>?</span>
-            </div>
-            <div id="whatif-summary" class="whatif-summary"></div>
-            <div class="chart-container" style="height:240px"><canvas id="whatif-chart"></canvas></div>
-            <div class="whatif-note" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem">Percentages zijn cash-gewogen (zelfde methode als Lifetime Rendement): winst t.o.v. ingelegd kapitaal, met jouw stortingen gesimuleerd in het alternatief. De grafiek toont de tijdgewogen evolutie (kwartaalrendementen samengesteld, start = 100) en kan daarvan afwijken. Cashflows verondersteld aan kwartaalstart; dividenden niet meegerekend in het alternatief.</div>
           </div>
         </div>
       </div>
@@ -1275,8 +1226,59 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
       </div>
     </div>
 
-    <!-- ─── PAGE: Stocks ─── -->
-    <div class="page-section" id="page-stocks">
+    <!-- ─── PAGE: Lifetime ─── -->
+    <div class="page-section" id="page-lifetime">
+      <!-- Lifetime chart -->
+      <div class="grid-1">
+        <div class="card">
+          <div class="card-header">
+            <h3>Lifetime Rendement</h3>
+            <span class="badge" style="background:var(--bg);color:var(--text-muted)">Cumulatief vanaf dag één</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-container" style="height:280px"><canvas id="lifetime-chart"></canvas></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted)">
+              <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#D4A017" stroke-width="2" stroke-dasharray="4,3"/><polygon points="12,1 16,5 12,9 8,5" fill="#D4A017"/></svg>
+              S&amp;P 500 (zelfde inleg) — individueel per lid berekend
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wat als…? -->
+      <div class="grid-1">
+        <div class="card" id="whatif-card">
+          <div class="card-header"><h3>🔮 Wat als…?</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Portefeuille vs alternatief</span></div>
+          <div class="card-body">
+            <div class="whatif-controls">
+              <span>Wat als</span>
+              <select id="whatif-member" onchange="setWhatIfMember(this.value)"></select>
+              <span>alles had belegd in</span>
+              <select id="whatif-alt" onchange="setWhatIfAlt(this.value)"></select>
+              <span>?</span>
+            </div>
+            <div id="whatif-summary" class="whatif-summary"></div>
+            <div class="chart-container" style="height:240px"><canvas id="whatif-chart"></canvas></div>
+            <div class="whatif-note" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem">Percentages zijn cash-gewogen (zelfde methode als Lifetime Rendement): winst t.o.v. ingelegd kapitaal, met jouw stortingen gesimuleerd in het alternatief. De grafiek toont de tijdgewogen evolutie (kwartaalrendementen samengesteld, start = 100) en kan daarvan afwijken. Cashflows verondersteld aan kwartaalstart; dividenden niet meegerekend in het alternatief.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ─── PAGE: Portfolio ─── -->
+    <div class="page-section" id="page-portfolio">
+
+      <!-- Best & worst trades ever -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><h3>💎 Beste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
+          <div class="card-body" id="best-trades-body"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>🧨 Slechtste trades ooit</h3><span class="badge" style="background:var(--bg);color:var(--text-muted)">Gerealiseerde verkopen</span></div>
+          <div class="card-body" id="worst-trades-body"></div>
+        </div>
+      </div>
+
 
       <div class="card">
         <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem">
@@ -1300,8 +1302,8 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
         </div>
       </div>
     </div>
-    <!-- ─── PAGE: Jerseys & Points ─── -->
-    <div class="page-section" id="page-jerseys">
+    <!-- ─── PAGE: Club ─── -->
+    <div class="page-section" id="page-club">
       <div class="card" style="margin-bottom:0.6rem">
         <div class="card-header"><h3>Truiwinnaars dit kwartaal</h3></div>
         <div class="card-body" id="jersey-winners-grid"></div>
@@ -1349,6 +1351,44 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
         <div class="card-header"><h3>Palmares — Alle truien sinds oprichting</h3></div>
         <div class="card-body" id="palmares-container"></div>
       </div>
+
+      <!-- ─── Kamelenrace ─── -->
+  <div class="page-header">
+    <h2>&#128042; Kamelenrace</h2>
+  </div>
+
+  <div class="card race-card" style="padding:1.5rem 1.5rem 1rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+      <h3 id="race-title" style="margin:0;font-size:1.05rem;">De race voor de etappe van 2025</h3>
+      <div class="race-controls">
+        <div class="race-seg">
+          <button class="race-seg-btn active" id="race-btn-etappe" onclick="setRaceView('etappe')">Etappe</button>
+          <button class="race-seg-btn" id="race-btn-ytd" onclick="setRaceView('ytd')">YTD</button>
+          <button class="race-seg-btn" id="race-btn-alltime" onclick="setRaceView('alltime')">Vanaf het begin</button>
+        </div>
+        <div class="race-year-wrap" id="race-year-ctrl">
+          <button class="race-year-step" onclick="stepRaceYear(-1)">&#9664;</button>
+          <span class="race-year-val" id="race-year-label">2025</span>
+          <button class="race-year-step" onclick="stepRaceYear(1)">&#9654;</button>
+        </div>
+        <button class="race-replay" onclick="replayRace()">
+          <svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg>
+          Replay
+        </button>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:4px;">
+          <span style="font-size:0.76rem;font-weight:600;color:var(--navy);opacity:0.7;">Snelheid</span>
+          <input type="range" id="race-speed-slider" min="0.05" max="0.5" step="0.05" value="0.1"
+                 oninput="setRaceSpeed(this.value)"
+                 style="width:72px;cursor:pointer;accent-color:var(--navy);">
+          <span id="race-speed-label" style="font-size:0.78rem;font-weight:700;color:var(--navy);min-width:26px;">0.5×</span>
+        </div>
+      </div>
+    </div>
+    <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:0.75rem;font-size:0.78rem;"></div>
+    <div class="race-canvas-wrap" style="position:relative;height:480px;">
+      <canvas id="race-chart"></canvas>
+    </div>
+  </div>
     </div>
 
     <!-- ─── PAGE: Member Deep-dive ─── -->
@@ -1464,46 +1504,8 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
     </div>
 
   
-<div class="page-section" id="page-kamelenrace">
-  <div class="page-header">
-    <h2>&#128042; Kamelenrace</h2>
-  </div>
 
-  <div class="card race-card" style="padding:1.5rem 1.5rem 1rem;">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
-      <h3 id="race-title" style="margin:0;font-size:1.05rem;">De race voor de etappe van 2025</h3>
-      <div class="race-controls">
-        <div class="race-seg">
-          <button class="race-seg-btn active" id="race-btn-etappe" onclick="setRaceView('etappe')">Etappe</button>
-          <button class="race-seg-btn" id="race-btn-ytd" onclick="setRaceView('ytd')">YTD</button>
-          <button class="race-seg-btn" id="race-btn-alltime" onclick="setRaceView('alltime')">Vanaf het begin</button>
-        </div>
-        <div class="race-year-wrap" id="race-year-ctrl">
-          <button class="race-year-step" onclick="stepRaceYear(-1)">&#9664;</button>
-          <span class="race-year-val" id="race-year-label">2025</span>
-          <button class="race-year-step" onclick="stepRaceYear(1)">&#9654;</button>
-        </div>
-        <button class="race-replay" onclick="replayRace()">
-          <svg viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9"/></svg>
-          Replay
-        </button>
-        <div style="display:flex;align-items:center;gap:6px;margin-left:4px;">
-          <span style="font-size:0.76rem;font-weight:600;color:var(--navy);opacity:0.7;">Snelheid</span>
-          <input type="range" id="race-speed-slider" min="0.05" max="0.5" step="0.05" value="0.1"
-                 oninput="setRaceSpeed(this.value)"
-                 style="width:72px;cursor:pointer;accent-color:var(--navy);">
-          <span id="race-speed-label" style="font-size:0.78rem;font-weight:700;color:var(--navy);min-width:26px;">0.5×</span>
-        </div>
-      </div>
-    </div>
-    <div id="race-legend" style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:0.75rem;font-size:0.78rem;"></div>
-    <div class="race-canvas-wrap" style="position:relative;height:480px;">
-      <canvas id="race-chart"></canvas>
-    </div>
-  </div>
-</div>
-
-<div class="page-section" id="page-uitleg">
+<div class="page-section" id="page-info">
   <div class="page-header">
     <h2>&#128218; Hoe werkt het?</h2>
   </div>
@@ -2034,16 +2036,16 @@ function showPage(id) {
   if (document.body.classList.contains('mobile-nav-open')) toggleMobileNav(false);
   if (window.innerWidth <= 900) window.scrollTo(0, 0);
 
-  if (id === 'kamelenrace' && DATA) setTimeout(initKamelenrace, 50);
+  if (id === 'club' && DATA) setTimeout(initKamelenrace, 50);
 
   // Mobile: open heatmap at the most recent quarters
-  if (id === 'returns' && window.innerWidth <= 900) {
+  if (id === 'kwartaal' && window.innerWidth <= 900) {
     setTimeout(() => { const hs = document.querySelector('.heatmap-scroll'); if (hs) hs.scrollLeft = hs.scrollWidth; }, 60);
   }
 
   // Page title map
   const qSuffix = CURRENT_QUARTER ? ' — ' + CURRENT_QUARTER.replace('_',' ') : '';
-  const titles = { overview:'Kwartaaloverzicht' + qSuffix, returns:'Rendementen', stocks:'Aandelen', jerseys:'Truien & Punten', kamelenrace:'Kamelenrace', member:'Lid' };
+  const titles = { stand:'Stand' + qSuffix, kwartaal:'Kwartaal' + qSuffix, lifetime:'Lifetime Rendement', portfolio:'Portfolio', club:'Club', info:'Info', member:'Lid' };
   document.getElementById('page-title').textContent = titles[id] || id;
 }
 
