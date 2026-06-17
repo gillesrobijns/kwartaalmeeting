@@ -2125,7 +2125,7 @@ function renderKPIs(s, bm) {
   const avgRets=sparkKeys.map(qk=>gs(qk).avg_return||0),spDiffs=sparkKeys.map(qk=>(gs(qk).avg_return||0)-(gs(qk).sp500_quarterly||0)),beats=sparkKeys.map(qk=>gs(qk).beat_sp500_count||0),txs=sparkKeys.map(qk=>gs(qk).num_transactions||0);
   const txCurr=txs[txs.length-1]||0,txPrev=txs.length>=2?txs[txs.length-2]:null,txDelta=txPrev!==null?txCurr-txPrev:null;
   const txSub=txDelta!==null?(txDelta>0?'+':'')+txDelta+' vs vorig kwartaal':'Dit kwartaal';
-  const kpis=[{v:pct(s.avg_return),l:'Groepsrendement',sub:'vs S&P 500: '+pct(sp),c:pctClass(s.avg_return||0),spark:sparkBars(avgRets,'var(--green)','var(--red)'),modal:'groep'},{v:(diff>=0?'+':'')+(diff*100).toFixed(2)+'ppt',l:'vs S&P 500',sub:diff>=0?'Boven de index':'Onder de index',c:pctClass(diff),spark:sparkBars(spDiffs,'var(--green)','var(--red)'),modal:'sp'},{v:(s.beat_sp500_count||0)+'/'+(s.num_members||0),l:'Verslaan S&P 500',sub:'Leden boven de index',c:(s.beat_sp500_count||0)>=5?'positive':'',spark:sparkBars(beats,'var(--green)'),modal:'sp'},{v:txCurr,l:'Transacties',sub:txSub,c:txDelta!==null?(txDelta>=0?'positive':'negative'):'',spark:sparkBars(txs,'var(--text-muted)'),modal:'transactions'},];
+  const kpis=[{v:pct(s.avg_return),l:'Groepsrendement',sub:'vs S&P 500: '+pct(sp),c:pctClass(s.avg_return||0),spark:sparkBars(avgRets,'var(--green)','var(--red)'),modal:'groep'},{v:(diff>=0?'+':'')+(diff*100).toFixed(2)+'ppt',l:'vs S&P 500',sub:diff>=0?'Boven de index':'Onder de index',c:pctClass(diff),spark:sparkBars(spDiffs,'var(--green)','var(--red)'),modal:'sp'},{v:(s.beat_sp500_count||0)+'/'+(s.num_members||0),l:'Verslaan S&P 500',sub:'Leden boven de index',c:(s.beat_sp500_count||0)>=5?'positive':'',spark:sparkBars(beats,'var(--green)'),modal:'sp'},{v:txCurr,l:'Activiteit',sub:'trades & dividenden',c:txDelta!==null?(txDelta>=0?'positive':'negative'):'',spark:sparkBars(txs,'var(--text-muted)'),modal:'transactions'},];
   document.getElementById('kpi-row').innerHTML=kpis.map(k=>'<div class="kpi-card" onclick="openKpiModal(\''+k.modal+'\')"><div style="flex:1;min-width:0"><div class="kpi-label">'+k.l+'</div><div class="kpi-value '+k.c+'">'+k.v+'</div><div class="kpi-sub">'+k.sub+'</div></div>'+k.spark+'</div>').join('');
 }
 
@@ -2140,7 +2140,7 @@ function openKpiModal(type) {
   const modal   = document.getElementById('kpi-modal');
   overlay.style.display = 'block';
   modal.style.display   = 'flex';
-  const titles = { groep:'Groepsrendement — '+CURRENT_QUARTER.replace('_',' '), sp:'Leden vs. S&P 500', transactions:'Transacties dit kwartaal' };
+  const titles = { groep:'Groepsrendement — '+CURRENT_QUARTER.replace('_',' '), sp:'Leden vs. S&P 500', transactions:'Activiteit — '+CURRENT_QUARTER.replace('_',' ') };
   document.getElementById('kpi-modal-title').textContent = titles[type] || type;
   const body = document.getElementById('kpi-modal-body');
   if (type === 'transactions') body.innerHTML = _modalTransactions(q, s);
@@ -2162,74 +2162,88 @@ function _modalSummaryBar(items) {
 }
 
 function _modalTransactions(q, s) {
-  const sold   = (q.sold_positions || []).slice().sort((a,b) => new Date(b.date)-new Date(a.date));
-  const qr     = q.quarterly_returns || [];
-  const txMap  = (s.transactions_per_member) || {};
-  const active = Object.keys(txMap).sort();
-  const memberTotals = {};
-  qr.forEach(r => { memberTotals[r.member] = { bought: r.bought||0, sold: r.sold||0 }; });
-  const totalSoldEur = sold.reduce((a,x)=>a+(x.total_eur||0),0);
-  const totalGain    = sold.reduce((a,x)=>a+(x.gain_eur||0),0);
+  const sold = (q.sold_positions || []).slice().sort((a,b) => new Date(b.date)-new Date(a.date));
+  const qr   = q.quarterly_returns || [];
+  const memberR = {};
+  qr.forEach(r => { memberR[r.member] = { bought: r.bought||0, sold: r.sold||0, dividends: r.dividends||0 }; });
+
+  const divMembers = qr.filter(r => (r.dividends||0) > 0).sort((a,b) => (b.dividends||0)-(a.dividends||0));
+  const totalDiv   = divMembers.reduce((a,r) => a+(r.dividends||0), 0);
+  const totalGain  = sold.reduce((a,x) => a+(x.gain_eur||0), 0);
+  const buyMembers = qr.filter(r => (r.bought||0) > 0);
 
   let html = _modalSummaryBar([
-    { l:'Totaal transacties', v: s.num_transactions||0 },
-    { l:'Actieve leden',      v: active.length },
-    { l:'Totaal verkopen',    v: '€'+Math.round(totalSoldEur).toLocaleString('nl-BE'), c:'var(--navy)' },
-    { l:'Winst/Verlies',      v: (totalGain>=0?'+':'')+'€'+Math.round(Math.abs(totalGain)).toLocaleString('nl-BE'), c: totalGain>=0?'var(--green)':'var(--red)' },
+    { l:'Totale activiteit', v: s.num_transactions||0 },
+    { l:'Verkopen',          v: sold.length },
+    { l:'Aankopen (leden)',  v: buyMembers.length },
+    { l:'Totaal dividend',   v: '€'+(totalDiv).toLocaleString('nl-BE',{minimumFractionDigits:2,maximumFractionDigits:2}), c:'var(--green)' },
   ]);
 
-  // Sold positions
-  if (sold.length) {
-    html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Verkopen</div>';
+  // ── Trades ──────────────────────────────────────
+  html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Trades</div>';
+
+  if (sold.length || buyMembers.length) {
     html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:1.25rem;">';
     html += '<thead><tr style="border-bottom:2px solid var(--border);">'+
+      '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Type</th>'+
       '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
       '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Aandeel</th>'+
-      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Stukken</th>'+
       '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Bedrag</th>'+
       '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">W/V</th>'+
-      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">%</th>'+
       '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Datum</th>'+
     '</tr></thead><tbody>';
+    // Sells (we have full detail)
     sold.forEach(t => {
       const gain=t.gain_eur||0; const ret=t.return_pct||0;
       const col = gain>=0?'var(--green)':'var(--red)';
       const d = new Date(t.date).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
+      const wv = (gain>=0?'+':'')+(ret*100).toFixed(1)+'% / '+(gain>=0?'+':'')+'€'+Math.round(Math.abs(gain)).toLocaleString('nl-BE');
       html += '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:0.4rem;"><span style="font-size:0.65rem;font-weight:700;padding:0.15rem 0.4rem;border-radius:4px;background:#FFEBEE;color:var(--red);">VERKOOP</span></td>'+
         '<td style="padding:0.4rem;font-weight:600;">'+t.member+'</td>'+
-        '<td style="padding:0.4rem;">'+t.stock+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);">'+t.shares+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.total_eur||0).toLocaleString('nl-BE')+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;color:'+col+';" class="privacy-blur">'+(gain>=0?'+':'')+'€'+Math.round(Math.abs(gain)).toLocaleString('nl-BE')+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;font-weight:700;color:'+col+';">'+(ret>=0?'+':'')+(ret*100).toFixed(1)+'%</td>'+
+        '<td style="padding:0.4rem;">'+t.stock+' ×'+t.shares+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;" class="eur">€'+Math.round(t.total_eur||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;font-size:0.72rem;color:'+col+';" class="eur">'+wv+'</td>'+
         '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);font-size:0.72rem;">'+d+'</td>'+
+      '</tr>';
+    });
+    // Buys (only totals per member available in dashboard data)
+    buyMembers.forEach(r => {
+      html += '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:0.4rem;"><span style="font-size:0.65rem;font-weight:700;padding:0.15rem 0.4rem;border-radius:4px;background:#E8F5E9;color:var(--green);">AANKOOP</span></td>'+
+        '<td style="padding:0.4rem;font-weight:600;">'+r.member+'</td>'+
+        '<td style="padding:0.4rem;color:var(--text-muted);font-style:italic;">zie portefeuille</td>'+
+        '<td style="padding:0.4rem;text-align:right;" class="eur">€'+Math.round(r.bought||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;"></td>'+
+        '<td style="padding:0.4rem;"></td>'+
       '</tr>';
     });
     html += '</tbody></table>';
   } else {
-    html += '<div style="text-align:center;color:var(--text-muted);padding:1rem;font-size:0.85rem;">Geen verkopen dit kwartaal</div>';
+    html += '<div style="text-align:center;color:var(--text-muted);padding:0.75rem;font-size:0.85rem;margin-bottom:1rem;">Geen trades dit kwartaal</div>';
   }
 
-  // Activity per member
-  if (active.length) {
-    html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Activiteit per lid</div>';
+  // ── Dividenden ───────────────────────────────────
+  html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Dividenden</div>';
+  if (divMembers.length) {
     html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">'+
       '<thead><tr style="border-bottom:2px solid var(--border);">'+
         '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
-        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;"># Transacties</th>'+
-        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Aangekocht</th>'+
-        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Verkocht</th>'+
+        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Ontvangen</th>'+
+        '<th style="padding:0.3rem 0.4rem;"></th>'+
       '</tr></thead><tbody>';
-    active.forEach(m => {
-      const t = memberTotals[m]||{};
+    const maxDiv = Math.max(...divMembers.map(r=>r.dividends||0), 0.01);
+    divMembers.forEach(r => {
+      const barW = Math.round(((r.dividends||0)/maxDiv)*100);
       html += '<tr style="border-bottom:1px solid var(--border);">'+
-        '<td style="padding:0.4rem;font-weight:600;">'+m+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;">'+txMap[m]+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.bought||0).toLocaleString('nl-BE')+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.sold||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;font-weight:600;">'+r.member+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;color:var(--green);font-weight:700;" class="eur">€'+(r.dividends||0).toLocaleString('nl-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'+
+        '<td style="padding:0.4rem;width:120px;"><div style="background:var(--green);height:6px;border-radius:3px;width:'+barW+'px;opacity:0.7;"></div></td>'+
       '</tr>';
     });
     html += '</tbody></table>';
+  } else {
+    html += '<div style="text-align:center;color:var(--text-muted);padding:0.75rem;font-size:0.85rem;">Geen dividenden dit kwartaal</div>';
   }
   return html;
 }
@@ -4301,28 +4315,4 @@ function buildRevenueChart(stockName) {
       var gSign = growth >= 0 ? '+' : '';
       var gLabel = gSign + Math.round(growth) + '%';
       var gColor = growth >= 0 ? '#4ade80' : '#fca5a5';
-      bars += '<text x="'+Math.round(cx)+'" y="'+(padT-8)+'" text-anchor="middle" font-size="9" fill="'+gColor+'">'+gLabel+'</text>';
-    }
-
-    // Value label: above bar if there's room, otherwise inside bar
-    var valLabel = r.v + r.u;
-    var labelY;
-    var labelFill = '#CBD5E1';
-    if (by - (padT + 4) >= 14) {
-      // Enough room above bar (below growth label)
-      labelY = by - 5;
-    } else {
-      // Bar is tall — put label inside near top
-      labelY = by + 13;
-      labelFill = '#1e293b';
-    }
-    bars += '<text x="'+Math.round(cx)+'" y="'+labelY+'" text-anchor="middle" font-size="10" font-weight="600" fill="'+labelFill+'">'+valLabel+'</text>';
-
-    // Year label at bottom
-    bars += '<text x="'+Math.round(cx)+'" y="'+(H-8)+'" text-anchor="middle" font-size="10" fill="#64748B">'+r.y+'</text>';
-  }
-
-  var currency = rows[0].c;
-  return '<div style="margin-top:0.2rem">'
-    +'<div style="font-size:0.6rem;color:#64748B;letter-spacing:.4px;margin-bottom:4px">IN '+currency+' \u00b7 JAARLIJKSE OMZET</div>'
-    +
+      bars += '
