@@ -1213,6 +1213,10 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
           </div>
           <div class="card-body">
             <div class="chart-container" style="height:280px"><canvas id="lifetime-chart"></canvas></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted)">
+              <svg width="24" height="10" viewBox="0 0 24 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#D4A017" stroke-width="2" stroke-dasharray="4,3"/><polygon points="12,1 16,5 12,9 8,5" fill="#D4A017"/></svg>
+              S&amp;P 500 (zelfde inleg) — individueel per lid berekend
+            </div>
           </div>
         </div>
       </div>
@@ -2389,13 +2393,42 @@ function renderLifetimeChart(ret) {
   const vals    = sorted.map(r => +(r.return_pct * 100).toFixed(2));
   const colors  = vals.map(v => v >= 0 ? '#2E8B57' : '#DC143C');
 
+  // Compute cash-weighted S&P per member (same method as Wat Als / individual charts)
+  const keys = _qKeysUpToSelected();
+  const sp500cw = sorted.map(({ member }) => {
+    let cfVal = null, vStart0 = null, totB = 0, totS = 0, netNew = 0;
+    for (const qk of keys) {
+      const qd = DATA.quarters[qk] || {};
+      const mr = (qd.quarterly_returns || []).find(x => x.member === member);
+      if (!mr && cfVal === null) continue;
+      const spQ = (qd.group_stats || {}).sp500_quarterly || 0;
+      const _b = mr ? (mr.bought || 0) : 0, _s = mr ? (mr.sold || 0) : 0;
+      if (cfVal === null) { cfVal = mr ? (mr.value_start || 0) : 0; vStart0 = cfVal; }
+      cfVal = (cfVal + _b - _s) * (1 + spQ);
+      totB += _b; totS += _s; netNew += Math.max(_b - _s, 0);
+    }
+    const capBase = (vStart0 || 0) + netNew;
+    return capBase > 0 ? +((cfVal + totS - (vStart0 || 0) - totB) / capBase * 100).toFixed(2) : null;
+  });
+
+  if (_charts['lifetime']) { try { _charts['lifetime'].destroy(); } catch(e){} delete _charts['lifetime']; }
   _charts['lifetime'] = new Chart(document.getElementById('lifetime-chart'), {
     type: 'bar',
     data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderRadius: 6, borderSkipped: false }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: ctx => {
+              const sp = sp500cw[ctx.dataIndex];
+              return sp !== null ? 'S&P (zelfde inleg): ' + sp.toFixed(2) + '%' : '';
+            }
+          }
+        }
+      },
       scales: {
         x: {
           grid: { display: false },
@@ -2411,9 +2444,10 @@ function renderLifetimeChart(ret) {
     plugins: [{
       id: 'll',
       afterDatasetsDraw(ch) {
-        const { ctx } = ch;
+        const { ctx, scales: { y } } = ch;
         ch.data.datasets[0].data.forEach((v, i) => {
           const bar = ch.getDatasetMeta(0).data[i];
+          // Value label
           ctx.save();
           ctx.font = 'bold 11px system-ui';
           ctx.fillStyle = chartTextColor();
@@ -2421,6 +2455,32 @@ function renderLifetimeChart(ret) {
           ctx.textBaseline = v >= 0 ? 'bottom' : 'top';
           ctx.fillText(v.toFixed(2) + '%', bar.x, bar.y + (v >= 0 ? -4 : 4));
           ctx.restore();
+          // S&P marker line
+          const sp = sp500cw[i];
+          if (sp !== null) {
+            const spY = y.getPixelForValue(sp);
+            const hw = bar.width / 2;
+            ctx.save();
+            ctx.strokeStyle = '#D4A017';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(bar.x - hw, spY);
+            ctx.lineTo(bar.x + hw, spY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Small diamond
+            const d = 4;
+            ctx.fillStyle = '#D4A017';
+            ctx.beginPath();
+            ctx.moveTo(bar.x, spY - d);
+            ctx.lineTo(bar.x + d, spY);
+            ctx.lineTo(bar.x, spY + d);
+            ctx.lineTo(bar.x - d, spY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
         });
       }
     }]
