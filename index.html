@@ -330,6 +330,15 @@ body {
   text-transform: uppercase; letter-spacing: 0.5px;
 }
 .kpi-card .kpi-sub { font-size: 0.62rem; color: var(--text-muted); margin-top: 0.1rem; }
+.kpi-card { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+/* ── KPI Modal ───────────────────────────────── */
+#kpi-modal-overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000; }
+#kpi-modal { display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1001;background:var(--card-bg);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.25);width:min(680px,94vw);max-height:82vh;flex-direction:column; }
+.kpi-modal-hdr { display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.2rem 0.75rem;border-bottom:1px solid var(--border); }
+.kpi-modal-hdr h3 { margin:0;font-size:1rem;color:var(--navy); }
+.kpi-modal-close { background:none;border:none;cursor:pointer;font-size:1.15rem;color:var(--text-muted);padding:0 4px;line-height:1; }
+.kpi-modal-body { overflow-y:auto;padding:1rem 1.2rem; }
 .positive { color: var(--green); }
 .negative { color: var(--red); }
 
@@ -1105,6 +1114,16 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
 </nav>
 
 <!-- sync modal removed -->
+
+<!-- ─── KPI Modal ─── -->
+<div id="kpi-modal-overlay" onclick="closeKpiModal()"></div>
+<div id="kpi-modal" role="dialog" aria-modal="true">
+  <div class="kpi-modal-hdr">
+    <h3 id="kpi-modal-title"></h3>
+    <button class="kpi-modal-close" onclick="closeKpiModal()" title="Sluiten">✕</button>
+  </div>
+  <div class="kpi-modal-body" id="kpi-modal-body"></div>
+</div>
 
 
 <!-- SURPRISE OVERLAY -->
@@ -2106,12 +2125,195 @@ function renderKPIs(s, bm) {
   const avgRets=sparkKeys.map(qk=>gs(qk).avg_return||0),spDiffs=sparkKeys.map(qk=>(gs(qk).avg_return||0)-(gs(qk).sp500_quarterly||0)),beats=sparkKeys.map(qk=>gs(qk).beat_sp500_count||0),txs=sparkKeys.map(qk=>gs(qk).num_transactions||0);
   const txCurr=txs[txs.length-1]||0,txPrev=txs.length>=2?txs[txs.length-2]:null,txDelta=txPrev!==null?txCurr-txPrev:null;
   const txSub=txDelta!==null?(txDelta>0?'+':'')+txDelta+' vs vorig kwartaal':'Dit kwartaal';
-  const kpis=[{v:pct(s.avg_return),l:'Groepsrendement',sub:'vs S&P 500: '+pct(sp),c:pctClass(s.avg_return||0),spark:sparkBars(avgRets,'var(--green)','var(--red)')},{v:(diff>=0?'+':'')+(diff*100).toFixed(2)+'ppt',l:'vs S&P 500',sub:diff>=0?'Boven de index':'Onder de index',c:pctClass(diff),spark:sparkBars(spDiffs,'var(--green)','var(--red)')},{v:(s.beat_sp500_count||0)+'/'+(s.num_members||0),l:'Verslaan S&P 500',sub:'Leden boven de index',c:(s.beat_sp500_count||0)>=5?'positive':'',spark:sparkBars(beats,'var(--green)')},{v:txCurr,l:'Transacties',sub:txSub,c:txDelta!==null?(txDelta>=0?'positive':'negative'):'',spark:sparkBars(txs,'var(--text-muted)')},];
-  document.getElementById('kpi-row').innerHTML=kpis.map(k=>'<div class="kpi-card"><div style="flex:1;min-width:0"><div class="kpi-label">'+k.l+'</div><div class="kpi-value '+k.c+'">'+k.v+'</div><div class="kpi-sub">'+k.sub+'</div></div>'+k.spark+'</div>').join('');
+  const kpis=[{v:pct(s.avg_return),l:'Groepsrendement',sub:'vs S&P 500: '+pct(sp),c:pctClass(s.avg_return||0),spark:sparkBars(avgRets,'var(--green)','var(--red)'),modal:'groep'},{v:(diff>=0?'+':'')+(diff*100).toFixed(2)+'ppt',l:'vs S&P 500',sub:diff>=0?'Boven de index':'Onder de index',c:pctClass(diff),spark:sparkBars(spDiffs,'var(--green)','var(--red)'),modal:'sp'},{v:(s.beat_sp500_count||0)+'/'+(s.num_members||0),l:'Verslaan S&P 500',sub:'Leden boven de index',c:(s.beat_sp500_count||0)>=5?'positive':'',spark:sparkBars(beats,'var(--green)'),modal:'sp'},{v:txCurr,l:'Transacties',sub:txSub,c:txDelta!==null?(txDelta>=0?'positive':'negative'):'',spark:sparkBars(txs,'var(--text-muted)'),modal:'transactions'},];
+  document.getElementById('kpi-row').innerHTML=kpis.map(k=>'<div class="kpi-card" onclick="openKpiModal(\''+k.modal+'\')"><div style="flex:1;min-width:0"><div class="kpi-label">'+k.l+'</div><div class="kpi-value '+k.c+'">'+k.v+'</div><div class="kpi-sub">'+k.sub+'</div></div>'+k.spark+'</div>').join('');
 }
 
 // ── Overview Jersey Winners ───────────────────────────────
 function renderOverviewJerseys(w,stocks){const cfg={'Gele trui':{i:'&#x1F7E1;',bg:'#FFFDE7',c:'#F9A825'},'Etappeprijs':{i:'&#x1F7E2;',bg:'#E8F5E9',c:'#2E8B57'},'Strijdlust':{i:'&#x1F534;',bg:'#FFEBEE',c:'#DC143C'},'Rode lantaarn':{i:'&#x1F7E0;',bg:'#FFCDD2',c:'#B71C1C'},'Witte trui':{i:'&#x26AA;',bg:'#F5F5F5',c:'#666'},'Groene trui':{i:'&#x1F7E2;',bg:'#E8F5E9',c:'#228B22'},'Bolletjestrui':{i:'&#x1F534;',bg:'#FFF3E0',c:'#FF4500'}};const bm={};(stocks||[]).forEach(s=>{if(!bm[s.member])bm[s.member]={best:s,worst:s};if((s.return_pct||0)>(bm[s.member].best.return_pct||0))bm[s.member].best=s;if((s.return_pct||0)<(bm[s.member].worst.return_pct||0))bm[s.member].worst=s;});document.getElementById('jersey-grid').innerHTML=Object.entries(w).map(([n,info])=>{const cc=cfg[n]||{i:'&#127942;',bg:'#E3F2FD',c:'#1565C0'};const mb=bm[info.winner]||{};let ctx=null;if(n==='Strijdlust'&&info.stock){ctx={name:info.stock,pct:info.value};}else if(n==='Rode lantaarn'&&mb.worst){ctx={name:mb.worst.stock,pct:mb.worst.return_pct||0};}else if(mb.best && n!=='Witte trui'){ctx={name:mb.best.stock,pct:mb.best.return_pct||0};}const pill=ctx?'<div class="j-stock">'+ctx.name+' '+(ctx.pct>=0?'+':'')+Math.round(ctx.pct*100)+'%</div>':'';return '<div class="jersey-card" style="background:'+cc.bg+';color:'+cc.c+';">'+'<div class="j-icon">'+cc.i+'</div><div class="j-name">'+n+'</div>'+'<div class="j-winner">'+info.winner+'</div><div class="j-value">'+pct(info.value)+'</div>'+pill+'</div>';}).join('');}
+
+// ── KPI Modals ───────────────────────────────────────────
+function openKpiModal(type) {
+  const q = DATA.quarters[CURRENT_QUARTER] || {};
+  const s = (q.group_stats || {});
+  const overlay = document.getElementById('kpi-modal-overlay');
+  const modal   = document.getElementById('kpi-modal');
+  overlay.style.display = 'block';
+  modal.style.display   = 'flex';
+  const titles = { groep:'Groepsrendement — '+CURRENT_QUARTER.replace('_',' '), sp:'Leden vs. S&P 500', transactions:'Transacties dit kwartaal' };
+  document.getElementById('kpi-modal-title').textContent = titles[type] || type;
+  const body = document.getElementById('kpi-modal-body');
+  if (type === 'transactions') body.innerHTML = _modalTransactions(q, s);
+  else if (type === 'groep')   body.innerHTML = _modalGroep(q, s);
+  else if (type === 'sp')      body.innerHTML = _modalSp(q, s);
+}
+function closeKpiModal() {
+  document.getElementById('kpi-modal-overlay').style.display = 'none';
+  document.getElementById('kpi-modal').style.display = 'none';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeKpiModal(); });
+
+function _modalSummaryBar(items) {
+  return '<div style="display:grid;grid-template-columns:repeat('+items.length+',1fr);gap:0.5rem;margin-bottom:1rem;">'+
+    items.map(it=>'<div style="background:var(--bg);border-radius:8px;padding:0.65rem;text-align:center;">'+
+      '<div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px;">'+it.l+'</div>'+
+      '<div style="font-size:1.35rem;font-weight:800;color:'+(it.c||'var(--navy)')+';">'+it.v+'</div>'+
+    '</div>').join('')+'</div>';
+}
+
+function _modalTransactions(q, s) {
+  const sold   = (q.sold_positions || []).slice().sort((a,b) => new Date(b.date)-new Date(a.date));
+  const qr     = q.quarterly_returns || [];
+  const txMap  = (s.transactions_per_member) || {};
+  const active = Object.keys(txMap).sort();
+  const memberTotals = {};
+  qr.forEach(r => { memberTotals[r.member] = { bought: r.bought||0, sold: r.sold||0 }; });
+  const totalSoldEur = sold.reduce((a,x)=>a+(x.total_eur||0),0);
+  const totalGain    = sold.reduce((a,x)=>a+(x.gain_eur||0),0);
+
+  let html = _modalSummaryBar([
+    { l:'Totaal transacties', v: s.num_transactions||0 },
+    { l:'Actieve leden',      v: active.length },
+    { l:'Totaal verkopen',    v: '€'+Math.round(totalSoldEur).toLocaleString('nl-BE'), c:'var(--navy)' },
+    { l:'Winst/Verlies',      v: (totalGain>=0?'+':'')+'€'+Math.round(Math.abs(totalGain)).toLocaleString('nl-BE'), c: totalGain>=0?'var(--green)':'var(--red)' },
+  ]);
+
+  // Sold positions
+  if (sold.length) {
+    html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Verkopen</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;margin-bottom:1.25rem;">';
+    html += '<thead><tr style="border-bottom:2px solid var(--border);">'+
+      '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
+      '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Aandeel</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Stukken</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Bedrag</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">W/V</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">%</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Datum</th>'+
+    '</tr></thead><tbody>';
+    sold.forEach(t => {
+      const gain=t.gain_eur||0; const ret=t.return_pct||0;
+      const col = gain>=0?'var(--green)':'var(--red)';
+      const d = new Date(t.date).toLocaleDateString('nl-BE',{day:'numeric',month:'short'});
+      html += '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:0.4rem;font-weight:600;">'+t.member+'</td>'+
+        '<td style="padding:0.4rem;">'+t.stock+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);">'+t.shares+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.total_eur||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;color:'+col+';" class="privacy-blur">'+(gain>=0?'+':'')+'€'+Math.round(Math.abs(gain)).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;font-weight:700;color:'+col+';">'+(ret>=0?'+':'')+(ret*100).toFixed(1)+'%</td>'+
+        '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);font-size:0.72rem;">'+d+'</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<div style="text-align:center;color:var(--text-muted);padding:1rem;font-size:0.85rem;">Geen verkopen dit kwartaal</div>';
+  }
+
+  // Activity per member
+  if (active.length) {
+    html += '<div style="font-size:0.68rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:0.4rem;">Activiteit per lid</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">'+
+      '<thead><tr style="border-bottom:2px solid var(--border);">'+
+        '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
+        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;"># Transacties</th>'+
+        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Aangekocht</th>'+
+        '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Verkocht</th>'+
+      '</tr></thead><tbody>';
+    active.forEach(m => {
+      const t = memberTotals[m]||{};
+      html += '<tr style="border-bottom:1px solid var(--border);">'+
+        '<td style="padding:0.4rem;font-weight:600;">'+m+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;">'+txMap[m]+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.bought||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;" class="privacy-blur">€'+Math.round(t.sold||0).toLocaleString('nl-BE')+'</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table>';
+  }
+  return html;
+}
+
+function _modalGroep(q, s) {
+  const qr = q.quarterly_returns || [];
+  const sp = s.sp500_quarterly || 0;
+  const maxR = Math.max(...qr.map(r=>Math.abs(r.return_pct||0)), 0.01);
+  const beatCount = qr.filter(r=>(r.return_pct||0)>sp).length;
+
+  let html = _modalSummaryBar([
+    { l:'Groepsgemiddelde', v:pct(s.avg_return||0), c:pctClass(s.avg_return||0) },
+    { l:'S&P 500',          v:pct(sp), c:'var(--text-muted)' },
+    { l:'Boven index',      v:beatCount+'/'+qr.length, c:beatCount>=5?'var(--green)':'var(--red)' },
+  ]);
+
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="border-bottom:2px solid var(--border);">'+
+    '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">#</th>'+
+    '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
+    '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Rendement</th>'+
+    '<th style="padding:0.3rem 0.4rem;"></th>'+
+  '</tr></thead><tbody>';
+  qr.forEach((r,i) => {
+    const ret=r.return_pct||0; const col=ret>=0?'var(--green)':'var(--red)';
+    const barW=Math.round((Math.abs(ret)/maxR)*120);
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1;
+    const isSp = Math.abs(ret-sp)<0.0001;
+    html += '<tr style="border-bottom:1px solid var(--border);"'+(ret>sp?' style="border-bottom:1px solid var(--border);"':'')+'>'+
+      '<td style="padding:0.4rem;color:var(--text-muted);font-size:0.78rem;">'+medal+'</td>'+
+      '<td style="padding:0.4rem;font-weight:600;">'+r.member+'</td>'+
+      '<td style="padding:0.4rem;text-align:right;font-weight:700;color:'+col+';">'+pct(ret)+'</td>'+
+      '<td style="padding:0.4rem 0.6rem;width:140px;"><div style="background:'+col+';height:7px;border-radius:4px;width:'+barW+'px;opacity:0.85;"></div></td>'+
+    '</tr>';
+  });
+  // S&P 500 reference row
+  const spW=Math.round((Math.abs(sp)/maxR)*120);
+  html += '<tr style="border-top:2px solid var(--border);background:var(--bg);">'+
+    '<td style="padding:0.4rem;"></td>'+
+    '<td style="padding:0.4rem;font-size:0.75rem;color:var(--text-muted);">S&P 500</td>'+
+    '<td style="padding:0.4rem;text-align:right;font-size:0.78rem;color:var(--text-muted);">'+pct(sp)+'</td>'+
+    '<td style="padding:0.4rem 0.6rem;"><div style="background:var(--text-muted);height:2px;width:'+spW+'px;margin:3px 0;opacity:0.5;"></div></td>'+
+  '</tr>';
+  html += '</tbody></table>';
+  return html;
+}
+
+function _modalSp(q, s) {
+  const qr = q.quarterly_returns || [];
+  const sp = s.sp500_quarterly || 0;
+  const diffs = qr.map(r=>({ member:r.member, ret:r.return_pct||0, diff:(r.return_pct||0)-sp }))
+                  .sort((a,b)=>b.diff-a.diff);
+  const maxD = Math.max(...diffs.map(d=>Math.abs(d.diff)), 0.01);
+  const beatCount = diffs.filter(d=>d.diff>0).length;
+
+  let html = _modalSummaryBar([
+    { l:'S&P 500 kwartaal', v:pct(sp), c:'var(--text-muted)' },
+    { l:'Boven index',      v:beatCount+'/'+diffs.length, c:beatCount>=5?'var(--green)':'var(--red)' },
+    { l:'Gem. outperformance', v:(diffs.reduce((a,d)=>a+d.diff,0)/diffs.length*100).toFixed(2)+'ppt', c:pctClass((diffs.reduce((a,d)=>a+d.diff,0)/diffs.length)) },
+  ]);
+
+  html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+  html += '<thead><tr style="border-bottom:2px solid var(--border);">'+
+    '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
+    '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Rendement</th>'+
+    '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">vs S&P</th>'+
+    '<th style="padding:0.3rem 0.4rem;text-align:center;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Verschil</th>'+
+  '</tr></thead><tbody>';
+  diffs.forEach(d => {
+    const col = d.diff>=0?'var(--green)':'var(--red)';
+    const barW = Math.round((Math.abs(d.diff)/maxD)*100);
+    const bar = d.diff>=0
+      ? '<div style="display:flex;align-items:center;gap:4px;"><div style="width:50px;text-align:right;"></div><div style="background:'+col+';height:7px;border-radius:4px;width:'+barW+'px;opacity:0.85;"></div></div>'
+      : '<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end;"><div style="background:'+col+';height:7px;border-radius:4px;width:'+barW+'px;opacity:0.85;"></div><div style="width:50px;"></div></div>';
+    html += '<tr style="border-bottom:1px solid var(--border);">'+
+      '<td style="padding:0.4rem;font-weight:600;">'+d.member+'</td>'+
+      '<td style="padding:0.4rem;text-align:right;">'+pct(d.ret)+'</td>'+
+      '<td style="padding:0.4rem;text-align:right;font-weight:700;color:'+col+';">'+(d.diff>=0?'+':'')+(d.diff*100).toFixed(2)+'ppt</td>'+
+      '<td style="padding:0.4rem;width:160px;">'+bar+'</td>'+
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
 
 // ── Benchmark Chart ──────────────────────────────
 function renderBenchmarkChart(bm, avg) {
@@ -4123,156 +4325,4 @@ function buildRevenueChart(stockName) {
   var currency = rows[0].c;
   return '<div style="margin-top:0.2rem">'
     +'<div style="font-size:0.6rem;color:#64748B;letter-spacing:.4px;margin-bottom:4px">IN '+currency+' \u00b7 JAARLIJKSE OMZET</div>'
-    +'<svg width="100%" viewBox="0 0 '+W+' '+H+'" style="overflow:visible">'+bars+'</svg>'
-    +'</div>';
-}
-
-function openStockModal(stockName){var overlay=document.getElementById('stock-modal-overlay');var modal=document.getElementById('stock-modal');if(!overlay||!modal)return;var meta=STOCK_META[stockName]||{};var sector=meta.s||'—';var type=meta.t||'Aandeel';var cfg=SECTOR_CONFIG[sector]||{color:'#6B7280',bg:'var(--border)'};var color=(window._allocColorMap&&window._allocColorMap[stockName])||cfg.color;var ini=stockName.replace(/[^A-Za-z0-9]/g,'').substring(0,2).toUpperCase();var allQ=(DATA.meta.available_quarters||Object.keys(DATA.quarters||{})).sort();var curQKey=window._currentQKey||allQ[allQ.length-1];var qData=DATA.quarters[curQKey]||{};var qHistory=[];allQ.forEach(function(qk){var qd=DATA.quarters[qk];if(!qd)return;var found=(qd.individual_stocks||[]).find(function(s){return s.stock===stockName;});if(found)qHistory.push({q:qk,ret:found.return_pct,member:found.member});});var holders=(qData.holdings||[]).filter(function(h){return h.stock===stockName;});var curStock=(qData.individual_stocks||[]).find(function(s){return s.stock===stockName;});var curReturn=curStock?curStock.return_pct:null;var curPrice=holders[0]?holders[0].price_eur:null;var fmtPct=function(v){return v==null?'—':(v>=0?'+':'')+(v*100).toFixed(1)+'%';};var fmtEur=function(v){return v==null?'—':'€'+v.toLocaleString('nl-BE',{minimumFractionDigits:2,maximumFractionDigits:2});};var retClass=curReturn==null?'':(curReturn>=0?'pos':'neg');var holdersHtml=holders.length===0?'<div style="font-size:.78rem;color:var(--text-muted);padding:.5rem 0">Niet in portefeuille dit kwartaal</div>':holders.map(function(h){var rc=h.return_pct>=0?'var(--green)':'var(--red)';return'<div class="sm-holder">'+_memberAvatar(h.member)+'<div class="sm-holder-name">'+h.member+'</div><div style="text-align:right"><div class="sm-holder-ret" style="color:'+rc+'">'+fmtPct(h.return_pct)+'</div><div class="sm-holder-detail">'+fmtEur(h.current_value_eur)+' &middot; '+h.shares.toFixed(1)+' st</div></div></div>';}).join('');var timelineHtml=qHistory.length===0?'<span style="font-size:.78rem;color:var(--text-muted)">Geen historische data</span>':qHistory.map(function(h){var isPos=h.ret>=0;var bg=isPos?'rgba(58,196,118,.12)':'rgba(220,20,60,.12)';var tc=isPos?'#3AC476':'#ff6b87';var parts=h.q.split('_');var lbl=parts[0]+"'"+parts[1].slice(2);return'<div class="sm-chip" style="background:'+bg+';color:'+tc+'"><span class="chip-q">'+lbl+'</span><span class="chip-r">'+fmtPct(h.ret)+'</span></div>';}).join('');var info=STOCK_INFO[stockName]||{};var revChart=buildRevenueChart(stockName);var leftHtml='';if(info.desc){leftHtml+='<div class="sm-section-label">Over het bedrijf</div><p class="sm-desc">'+info.desc+'</p>';if(info.income)leftHtml+='<div class="sm-income">'+info.income+'</div>';}if(revChart){leftHtml+='<div class="sm-section-label" style="margin-top:.6rem">Omzetgroei</div>'+revChart;}modal.innerHTML='<div class="stock-modal-header"><div class="stock-modal-avatar" style="background:'+color+'">'+ini+'</div><div style="flex:1;min-width:0"><div class="stock-modal-name">'+stockName+'</div><div class="stock-modal-sub">'+sector+'</div><div class="stock-modal-badges"><span class="stock-modal-badge" style="background:'+cfg.bg+';color:'+cfg.color+'">'+type+'</span>'+(curPrice!=null?'<span class="stock-modal-badge price">'+fmtEur(curPrice)+'</span>':'')+(curReturn!=null?'<span class="stock-modal-badge '+retClass+'">'+fmtPct(curReturn)+' dit kwartaal</span>':'')+'</div></div><button class="stock-modal-close-btn" onclick="closeStockModal()">✕</button></div>'+(leftHtml||holders.length>0?'<div class="sm-body"><div class="sm-left">'+leftHtml+'</div><div class="sm-right"><div class="sm-section-label">Aandeelhouders</div>'+holdersHtml+'</div></div>':'')+(qHistory.length>0?'<div class="sm-divider"></div><div class="sm-timeline"><div class="sm-section-label">Kwartaalrendement</div><div class="sm-chips">'+timelineHtml+'</div></div>':'');overlay.classList.add('open');document.body.style.overflow='hidden';}
-function closeStockModal(event){if(event&&event.target!==document.getElementById('stock-modal-overlay'))return;const overlay=document.getElementById('stock-modal-overlay');if(overlay)overlay.classList.remove('open');document.body.style.overflow='';}
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const overlay=document.getElementById('stock-modal-overlay');if(overlay&&overlay.classList.contains('open')){overlay.classList.remove('open');document.body.style.overflow='';}}});
-
-
-// ═══════════════════════════════════════════════════════════
-//  SYNC SERVER  (localhost:5758)
-// ═══════════════════════════════════════════════════════════
-
-// ═══ SYNC SERVER (localhost:5758) ════════════════════════════════════
-const _SYNC_URL = 'http://localhost:5758';
-let _syncRunning = false, _syncServerUp = false, _pollTimer = null;
-let _currentStep = -1, _allLines = [], _stepTimers = {};
-let _selectedQueuedQuarters = [], _syncYear = '', _queueRunning = false;
-
-const _PIPELINE_STEPS = [
-  {label:'Transacties laden',     match:/Step 1:|Loading transactions/i,          icon:'📥'},
-  {label:'Koersen ophalen',       match:/Step 2:|Fetching prices|Fetching bench/i, icon:'💶'},
-  {label:'Rendementen berekenen', match:/Step 3:|Computing portfolio/i,            icon:'📐'},
-  {label:'Trui-winnaars bepalen', match:/Step 4:|Determining jersey/i,             icon:'🏆'},
-  {label:'Commentaar genereren',  match:/Step 5:|Generating commentary/i,          icon:'🤖'},
-  {label:'Dashboard exporteren',  match:/Step 6:|Exporting dashboard/i,            icon:'📊'},
-  {label:'Presentatie genereren', match:/Step 7:|Generating HTML|Standalone.*built/i, icon:'🎞️'},
-];
-
-async function _checkSyncServer() {
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch(_SYNC_URL+'/status', {signal:ctrl.signal});
-    clearTimeout(t);
-    if (r.ok) {
-      const s = await r.json(); _syncServerUp = true; _syncRunning = s.syncing;
-      const el = document.getElementById('sb-sync-time');
-      if (el && s.last_sync) { const d = new Date(s.last_sync); el.textContent = 'Last sync: '+d.toLocaleDateString('nl-BE',{day:'numeric',month:'short'}); }
-      return s;
-    }
-  } catch(e) {}
-  _syncServerUp = false; return null;
-}
-
-function openSyncModal()  { document.getElementById('sync-modal').classList.add('open'); _renderSyncModal(); }
-function closeSyncModal() { document.getElementById('sync-modal').classList.remove('open'); }
-
-async function _renderSyncModal() {
-  const body = document.getElementById('sync-modal-body');
-  const sub  = document.getElementById('sync-modal-sub');
-  body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-muted)">Verbinden…</div>';
-  await _checkSyncServer();
-  if (!_syncServerUp) {
-    sub.textContent = 'Niet verbonden';
-    body.innerHTML = '<div class="conn-offline"><div class="conn-offline-icon">🔌</div><div class="conn-offline-title">Sync server niet gevonden</div><div class="conn-offline-desc">Start: <code>sync/autostart_start.bat</code><br>Of installeer: <code>sync/autostart_install.bat</code></div></div>';
-    return;
-  }
-  sub.textContent = 'localhost:5758 · verbonden';
-  const now = new Date();
-  const curQ = 'Q'+Math.ceil((now.getMonth()+1)/3);
-  const curY = now.getFullYear();
-  const qPills = ['Q1','Q2','Q3','Q4'].map(q => {
-    const on = q === curQ;
-    return '<button id="qpill-'+q+'" onclick="_toggleQPill(this)" style="padding:5px 14px;border-radius:20px;border:1.5px solid '+(on?'#2e8b57':'var(--border)')+';background:'+(on?'#2e8b57':'transparent')+';color:'+(on?'#fff':'var(--text)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .18s;width:auto;height:auto" data-selected="'+(on?'1':'0')+'">'+q+'</button>';
-  }).join('');
-  const yOpts = [2024,2025,2026].map(y=>'<option value="'+y+'"'+(y===curY?' selected':'')+'>'+y+'</option>').join('');
-  const btnBase = 'padding:9px 16px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .18s;width:auto;height:auto;';
-  body.innerHTML =
-    '<div class="conn-server-row"><span class="conn-dot"></span><span style="font-weight:700;color:var(--text)">Server actief</span><span style="margin-left:auto;color:var(--text-muted);font-family:monospace;font-size:11px">localhost:5758</span></div>'
-    + '<div style="margin-bottom:16px">'
-    +   '<div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:8px">Kwartalen (meerdere mogelijk):</div>'
-    +   '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+qPills+'</div>'
-    +   '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;font-weight:600;color:var(--text-muted)">Jaar:</span><select class="conn-qsel" id="sync-y">'+yOpts+'</select></div>'
-    + '</div>'
-    + '<div style="display:flex;gap:8px;margin-bottom:16px">'
-    +   '<button id="sync-btn-run" onclick="_triggerSync()" style="'+btnBase+'background:#2e8b57;color:#fff;flex:1">▶ Run geselecteerde kwartalen</button>'
-    +   '<button id="sync-btn-batch" onclick="_triggerSyncBatch()" style="'+btnBase+'background:var(--border);color:var(--text)">↺ Volledige batch</button>'
-    + '</div>'
-    + '<div id="sync-pipeline-area"></div>';
-}
-
-function _toggleQPill(btn) {
-  const on = btn.dataset.selected !== '1';
-  btn.dataset.selected = on ? '1' : '0';
-  btn.style.background = on ? '#2e8b57' : 'transparent';
-  btn.style.color = on ? '#fff' : 'var(--text)';
-  btn.style.borderColor = on ? '#2e8b57' : 'var(--border)';
-}
-function _getSelectedQuarters() {
-  return ['Q1','Q2','Q3','Q4'].filter(q => { const b=document.getElementById('qpill-'+q); return b && b.dataset.selected==='1'; });
-}
-
-async function _triggerSync() {
-  if (!_syncServerUp || _syncRunning) return;
-  const quarters = _getSelectedQuarters();
-  if (!quarters.length) { alert('Selecteer minstens één kwartaal.'); return; }
-  const y = document.getElementById('sync-y').value;
-  _selectedQueuedQuarters = [...quarters]; _syncYear = y; _queueRunning = false;
-  _startSyncUI(quarters.length > 1 ? quarters.join('+') + ' ' + y : quarters[0] + ' ' + y);
-  _runNextInQueue();
-}
-
-async function _triggerSyncBatch() {
-  if (!_syncServerUp || _syncRunning) return;
-  _startSyncUI('volledige batch');
-  try {
-    const r = await fetch(_SYNC_URL+'/sync/pipeline', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
-    const data = await r.json();
-    if (data.job_id) _pollJobThen(data.job_id, s => _endSync(s));
-    else { _appendSyncLine(data.error||'Fout','err'); _endSync(false); }
-  } catch(e) { _appendSyncLine('Server niet bereikbaar','err'); _endSync(false); }
-}
-
-async function _runNextInQueue() {
-  if (!_selectedQueuedQuarters.length) { _endSync(true); return; }
-  const q = _selectedQueuedQuarters.shift();
-  const y = _syncYear;
-  if (_queueRunning) {
-    _currentStep = -1;
-    const steps = document.getElementById('sync-steps');
-    if (steps) {
-      steps.querySelectorAll('.sync-step').forEach(el => el.className='sync-step step-pending');
-      steps.querySelectorAll('.step-icon').forEach((el,i) => el.textContent=i+1);
-      steps.querySelectorAll('.step-detail').forEach(el => el.textContent='');
-    }
-    _appendSyncLine('── '+q+' '+y+' ──','dim');
-  }
-  _queueRunning = true;
-  try {
-    const r = await fetch(_SYNC_URL+'/sync/pipeline', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({quarter:q, year:parseInt(y)})});
-    const data = await r.json();
-    if (data.job_id) _pollJobThen(data.job_id, function(ok) {
-      if (ok && _selectedQueuedQuarters.length) _runNextInQueue();
-      else { _queueRunning=false; _endSync(ok); }
-    });
-    else { _appendSyncLine(data.error||'Fout','err'); _queueRunning=false; _endSync(false); }
-  } catch(e) { _appendSyncLine('Server niet bereikbaar','err'); _queueRunning=false; _endSync(false); }
-}
-
-function _startSyncUI(label) {
-  _syncRunning=true; _currentStep=-1; _allLines=[];
-  const sb=document.querySelector('.sync-btn'); if(sb) sb.classList.add('syncing');
-  ['sync-btn-run','sync-btn-batch'].forEach(id=>{ const b=document.getElementById(id); if(b){b.disabled=true;b.style.opacity='.4';} });
-  _buildPipelineUI(label);
-}
-
-function _buildPipelineUI(label) {
-  const area = document.getElementById('sync-pipeline-area'); if(!area) return;
-  const stepsHtml = _PIPELINE_STEPS.map((s,i)=>'<div class="sync-step step-pending" id="sync-step-'+i+'"><div class="step-icon">'+(i+1)+'</div><div style="flex:1;min-width:0"><div class="step-label">'+s.icon+' '+s.label+'</div><div class="step-detail" id="step-detail-'+i+'"></div></div><div class="step-time" id="step-time-'+i+'"></div></div>').join('');
-  area.innerHTML = '<div class="sync-steps" id="sync-steps">'+stepsHtml+'</div>'
-    +'<div class="sync-term"><div class="sync-term-bar"><div class="sync-term-dots"><div class="sync-term-dot" style="background:#ff5f56"></div><div class="sync-term-dot" style="background:#ffbd2e"></div><div class="sync-term-dot" style="background:#27c93f"></div></div><div class="sync-term-title">'+label+'</div></div><div class="sync-term-body" id="sync-term-lines"></div></div>'
-    +'<div id="sync-outcome-area">
+    +
