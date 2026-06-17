@@ -2111,7 +2111,7 @@ function renderAll() {
 // ── KPIs ─────────────────────────────────────────
 function renderKPIs(s, bm) {
   const sp=s.sp500_quarterly||0; const diff=(s.avg_return||0)-sp;
-  const allQKeys=DATA.meta.available_quarters||[]; const currentQKey=DATA.meta.latest_quarter||'';
+  const allQKeys=DATA.meta.available_quarters||[]; const currentQKey=CURRENT_QUARTER||DATA.meta.latest_quarter||'';
   const currentIdx=allQKeys.indexOf(currentQKey); const sparkKeys=allQKeys.slice(Math.max(0,currentIdx-7),currentIdx+1);
   function sparkBars(values,posColor,negColor){if(!values||values.length<2)return '';const hasNeg=values.some(v=>v<0);const absMax=Math.max(...values.map(v=>Math.abs(v)))||1;const W=72,H=40,padX=2,padY=3,n=values.length,slotW=(W-2*padX)/n,barW=Math.max(3,slotW-2);const scale=hasNeg?(H/2-padY)/absMax:(H-2*padY)/absMax;const midY=hasNeg?H/2:H-padY;let rects='';values.forEach((v,i)=>{const bh=Math.max(2,Math.abs(v)*scale);const x=padX+i*slotW+(slotW-barW)/2;const y=v>=0?midY-bh:midY;const col=(negColor&&v<0)?negColor:posColor;const op=i===n-1?'1':'0.38';rects+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" style="fill:'+col+';opacity:'+op+'"/>';});const base=hasNeg?'<line x1="'+padX+'" y1="'+(H/2)+'" x2="'+(W-padX)+'" y2="'+(H/2)+'" style="stroke:var(--border);stroke-width:0.5;opacity:0.4"/>':'';return '<svg width="72" height="'+H+'" viewBox="0 0 72 '+H+'" aria-hidden="true" style="flex-shrink:0">'+base+rects+'</svg>';}
   const gs=qk=>((DATA.quarters[qk]||{}).group_stats||{});
@@ -2184,8 +2184,8 @@ function _modalTransactions(q, s) {
       '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Type</th>'+
       '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Lid</th>'+
       '<th style="text-align:left;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Aandeel</th>'+
-      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Bedrag</th>'+
-      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">W/V</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Stuks</th>'+
+      '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Rendement</th>'+
       '<th style="text-align:right;padding:0.3rem 0.4rem;font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;">Datum</th>'+
     '</tr></thead><tbody>';
     allTrades.forEach(t => {
@@ -2198,14 +2198,14 @@ function _modalTransactions(q, s) {
       if (isSell) {
         const gain=t.gain_eur||0; const ret=t.return_pct||0;
         const col = gain>=0?'var(--green)':'var(--red)';
-        const wv  = (gain>=0?'+':'')+(ret*100).toFixed(1)+'% / '+(gain>=0?'+':'')+'€'+Math.round(Math.abs(gain)).toLocaleString('nl-BE');
-        wvCell = '<td style="padding:0.4rem;text-align:right;font-size:0.72rem;color:'+col+';" class="eur">'+wv+'</td>';
+        const wv  = (gain>=0?'+':'')+(ret*100).toFixed(1)+'%';
+        wvCell = '<td style="padding:0.4rem;text-align:right;font-size:0.72rem;color:'+col+';">'+wv+'</td>';
       }
       html += '<tr style="border-bottom:1px solid var(--border);">'+
         '<td style="padding:0.4rem;">'+badge+'</td>'+
         '<td style="padding:0.4rem;font-weight:600;">'+t.member+'</td>'+
-        '<td style="padding:0.4rem;">'+t.stock+' ×'+t.shares+'</td>'+
-        '<td style="padding:0.4rem;text-align:right;" class="eur">€'+Math.round(t.total_eur||0).toLocaleString('nl-BE')+'</td>'+
+        '<td style="padding:0.4rem;">'+t.stock+'</td>'+
+        '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);">×'+t.shares+'</td>'+
         wvCell+
         '<td style="padding:0.4rem;text-align:right;color:var(--text-muted);font-size:0.72rem;">'+d+'</td>'+
       '</tr>';
