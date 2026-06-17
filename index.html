@@ -2062,6 +2062,10 @@ function renderAll() {
   const s = q.group_stats || {};
   const bm = (q.benchmarks || {}).quarterly || {};
 
+  // Update sidebar nav label for Overzicht with current quarter
+  const _navOv = document.getElementById('nav-overview-label');
+  if (_navOv) _navOv.textContent = CURRENT_QUARTER ? 'Kwartaaloverzicht — ' + CURRENT_QUARTER.replace('_',' ') : 'Overzicht';
+
   // Update date-info with current quarter status
   const isCurr = isCurrentQuarter(CURRENT_QUARTER);
   const asOf = currentAsOf(CURRENT_QUARTER);
