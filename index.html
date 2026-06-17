@@ -2808,17 +2808,22 @@ function _renderMemberRendementView() {
 
   // One dataset per member + S&P 500
   const datasets = [];
-  let sp500Cumul = 0;
+  let _sp2CW = null, _sp2V0 = null, _sp2TotB = 0, _sp2TotS = 0, _sp2Net = 0;
   const sp500Data = [];
   for (const qk of sortedQKeys) {
     const qd = DATA.quarters[qk];
     if (!qd) continue;
     if (!(qd.lifetime_returns||[]).find(r=>r.member===name)) continue;
+    const mr2 = (qd.quarterly_returns||[]).find(r=>r.member===name);
     const spQ = (qd.group_stats||{}).sp500_quarterly || 0;
-    sp500Cumul = (1 + sp500Cumul/100) * (1 + spQ) * 100 - 100;
-    sp500Data.push(sp500Cumul);
+    const _b2 = mr2 ? (mr2.bought || 0) : 0, _s2 = mr2 ? (mr2.sold || 0) : 0;
+    if (_sp2CW === null) { _sp2CW = mr2 ? (mr2.value_start || 0) : 0; _sp2V0 = _sp2CW; }
+    _sp2CW = (_sp2CW + _b2 - _s2) * (1 + spQ);
+    _sp2TotB += _b2; _sp2TotS += _s2; _sp2Net += Math.max(_b2 - _s2, 0);
+    const _sp2Base = (_sp2V0 || 0) + _sp2Net;
+    sp500Data.push(_sp2Base > 0 ? +((_sp2CW + _sp2TotS - (_sp2V0||0) - _sp2TotB) / _sp2Base * 100).toFixed(2) : 0);
   }
-  datasets.push({ label:'S&P 500', data: sp500Data, borderColor:'#FFD700', borderDash:[6,3], backgroundColor:'transparent', fill:false, tension:0.3, pointRadius:0, borderWidth:2, order:1 });
+  datasets.push({ label:'S&P 500 (zelfde inleg)', data: sp500Data, borderColor:'#FFD700', borderDash:[6,3], backgroundColor:'transparent', fill:false, tension:0.3, pointRadius:0, borderWidth:2, order:1 });
 
   allMembers.forEach((m, mi) => {
     const isActive = m === name;
@@ -3211,18 +3216,23 @@ function renderMemberPage(name) {
   const yieldLabels = [];
   const yieldValues = [];
   const sp500Values = [];
-  let sp500Cumul = 0;
+  let _spCW = null, _spV0 = null, _spTotB = 0, _spTotS = 0, _spNet = 0;
   for (const qk of sortedQKeys) {
     const qd = DATA.quarters[qk];
     if (!qd) continue;
     const mlr = (qd.lifetime_returns||[]).find(r=>r.member===name);
     if (mlr) {
+      const mr = (qd.quarterly_returns||[]).find(r=>r.member===name);
       yieldLabels.push(qk.replace('_',' '));
       yieldValues.push(mlr.return_pct * 100);
-      // S&P 500 cumulative: use group_stats.sp500_quarterly per quarter
+      // Cash-weighted S&P 500: simulate S&P with member's actual cash flows (same as Wat Als)
       const spQ = (qd.group_stats||{}).sp500_quarterly || 0;
-      sp500Cumul = (1 + sp500Cumul/100) * (1 + spQ) * 100 - 100;
-      sp500Values.push(sp500Cumul);
+      const _b = mr ? (mr.bought || 0) : 0, _s = mr ? (mr.sold || 0) : 0;
+      if (_spCW === null) { _spCW = mr ? (mr.value_start || 0) : 0; _spV0 = _spCW; }
+      _spCW = (_spCW + _b - _s) * (1 + spQ);
+      _spTotB += _b; _spTotS += _s; _spNet += Math.max(_b - _s, 0);
+      const _spBase = (_spV0 || 0) + _spNet;
+      sp500Values.push(_spBase > 0 ? +((_spCW + _spTotS - (_spV0||0) - _spTotB) / _spBase * 100).toFixed(2) : 0);
     }
   }
   if (yieldLabels.length > 1) {
@@ -3244,7 +3254,7 @@ function renderMemberPage(name) {
             pointBorderWidth: 2,
           },
           {
-            label: 'S&P 500',
+            label: 'S&P 500 (zelfde inleg)',
             data: sp500Values,
             borderColor: '#FFD700',
             borderDash: [6, 3],
