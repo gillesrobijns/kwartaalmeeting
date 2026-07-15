@@ -1977,17 +1977,18 @@ function stepYear(dir) {
   if (qs.length) selectQuarter(qs[qs.length - 1]);
 }
 
+function updateSlidesLink(qkey) {
+  const link = document.getElementById('slides-link');
+  if (link && qkey) {
+    const parts = qkey.split('_'); // e.g. ["Q1","2026"]
+    link.href = 'Kwartaalmeeting_' + parts[0] + '_' + parts[1] + '_slides.html';
+    link.style.display = 'block';
+  }
+}
 function selectQuarter(qkey) {
   CURRENT_QUARTER = qkey;
   renderQuarterPicker();
-  // Update presentation link
-  const link = document.getElementById('slides-link');
-  if (link) {
-    const parts = qkey.split('_'); // e.g. ["Q1","2026"]
-    const fname = 'Kwartaalmeeting_' + parts[0] + '_' + parts[1] + '_slides.html';
-    link.href = fname;
-    link.style.display = 'block';
-  }
+  updateSlidesLink(qkey);
   renderAll();
 }
 
@@ -2032,6 +2033,7 @@ function init() {
   CURRENT_QUARTER = _availableKeys[_availableKeys.length - 1]; // public
   _selectedYear = parseInt(CURRENT_QUARTER.split('_')[1]);
   renderQuarterPicker();
+  updateSlidesLink(CURRENT_QUARTER); // show presentation button on first load
 
   // Members nav
   const mnav = document.getElementById('members-nav');
