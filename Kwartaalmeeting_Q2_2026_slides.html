@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kwartaalmeeting</title>
+<title>Kwartaalmeeting · Q1 2026</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,400;1,9..144,600&family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -295,6 +295,10 @@ body{background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sa
 .closing p{margin-top:18px;color:#cfc6b2;font-size:clamp(1rem,2vw,1.35rem)}
 .closing .next{margin-top:34px;font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}
 
+@media (max-width:900px){
+  .events,.board,.season .cols,.rank .grid,.member .grid,.panels,.stocks .grid,.gvm .verdict{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+}
 .gvm{display:flex;flex-direction:column;flex:1;min-height:0;justify-content:flex-start}
 .gvm .gvmchart{flex:1;min-height:0;position:relative;margin:6px 0 16px}
 .life .lifechart{flex:1;min-height:0;position:relative;margin-top:8px}
@@ -443,22 +447,6 @@ body{background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sa
 .slide.prizes .prize-foot{display:flex;align-items:center;gap:9px;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 .slide.prizes .prize-q{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--paper-2);color:var(--ink);font-weight:900;flex:none}
 .slide.prizes .prizes-note{margin-top:26px;font-family:'Fraunces',serif;font-style:italic;color:var(--muted);font-size:clamp(1rem,1.6vw,1.25rem)}
-/* ── Bruiloft-aankondiging (one-off) ── */
-.slide.wedtease{background:var(--rev);color:var(--paper);overflow:hidden}
-.slide.wedtease .slide__inner{justify-content:center;align-items:center;text-align:center}
-.slide.wedtease .wt-eyebrow{font-size:.78rem;letter-spacing:.3em;text-transform:uppercase;color:var(--gold);font-weight:700;display:inline-flex;align-items:center;gap:10px}
-.slide.wedtease .wt-eyebrow i{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 0 4px rgba(193,58,34,.25);animation:pulse 1.2s ease-in-out infinite}
-.slide.wedtease .wt-h{font-family:'Fraunces',serif;font-weight:900;font-size:clamp(2rem,4.6vw,3.6rem);line-height:1.1;max-width:20ch;margin-top:22px}
-.slide.wedtease .wt-h .u{color:var(--gold);border-bottom:6px solid var(--gold);padding-bottom:.04em}
-.slide.wedtease .wt-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:44px;width:100%;max-width:900px}
-.slide.wedtease .wt-fact{background:var(--rev-2);border:1px solid rgba(255,255,255,.1);border-left:4px solid var(--gold);border-radius:12px;padding:18px 20px;text-align:left}
-.slide.wedtease .wt-fact b{display:block;font-size:1.15rem;font-weight:800;color:var(--paper)}
-.slide.wedtease .wt-fact span{display:block;margin-top:5px;font-size:.85rem;color:#9c9482}
-.slide.wedtease .wt-hint{margin-top:40px;font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);animation:pulse 1.6s ease-in-out infinite}
-.reveal.wed .nm{margin-top:16px}
-.reveal.wed .wed-cheer{font-family:'Fraunces',serif;font-style:italic;color:#e6dcc4;font-size:clamp(1.05rem,2vw,1.5rem);margin-top:16px}
-.reveal.wed .wed-tags{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:18px}
-.reveal.wed .wed-tags span{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:var(--gold);border:1px solid rgba(217,156,28,.45);border-radius:999px;padding:.28rem .8rem}
 /* ── App / dashboard intro (one-off) ── */
 .slide.appintro .ai-grid{display:grid;grid-template-columns:1.3fr 0.7fr;gap:clamp(28px,5vw,72px);align-items:center;flex:1;min-height:0;margin-top:10px}
 .slide.appintro .ai-lede{font-size:clamp(1.1rem,2vw,1.5rem);line-height:1.4;max-width:32ch;margin-bottom:26px}
@@ -474,63 +462,6 @@ body{background:var(--paper);color:var(--ink);font-family:'Archivo',system-ui,sa
 .slide.appintro .ai-right{display:flex;flex-direction:column;align-items:center;gap:16px}
 .slide.appintro .ai-qr{background:#fff;border:1px solid var(--line);border-radius:22px;padding:clamp(18px,2.2vw,30px);width:clamp(220px,22vw,300px);height:clamp(220px,22vw,300px);box-shadow:var(--shadow)}
 .slide.appintro .ai-scan{font-family:'Fraunces',serif;font-style:italic;color:var(--muted);font-size:1.1rem}
-
-/* ===== MOBILE (adaptive layouts) ===== */
-@media (max-width:820px){
-  .slide{padding:20px 16px 78px}
-  .slide.is-active{overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-  .cover h1{font-size:10.4vw}
-  .slide__inner{flex:1 0 auto;justify-content:flex-start}
-  .cover .slide__inner,.act .slide__inner,.reveal .slide__inner,.talk .slide__inner,.closing .slide__inner,.wedtease .slide__inner,.camel .slide__inner{justify-content:center}
-  .hint{display:none}
-  .chrome{padding:10px 14px}
-  .chrome .dots{display:none}
-  .head{flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:14px}
-  .head .meta{text-align:left}
-  .cover .scoreboard{flex-wrap:wrap;gap:16px 0;margin-top:30px}
-  .cover .sb{flex:1 1 50%;border-right:0;padding-right:10px}
-  .events,.board,.board-slide .board2,.season .cols,.rank .grid,.mgrid,.stocks .grid,.mkt-grid,.mkt-events,.slide.duvel .dv-grid,.slide.appintro .ai-grid,.slide.wedtease .wt-facts{grid-template-columns:1fr}
-  .mkt-events{grid-template-rows:none}
-  .season .cols4{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-  .season .scol{padding:12px 10px}
-  .season .srow2 .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .member .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .slide.prizes .prize-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .member .kpis{grid-template-columns:1fr 1fr;gap:8px}
-  .txgrid2{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .tx-slide .txgrid{column-count:1}
-  .boardchart,.board-slide .boardchart,.gvm .gvmchart,.mkt-idxchart{height:230px;min-height:230px;flex:none}
-  .life .lifechart{height:300px;min-height:300px;flex:none}
-  .race .race-wrap{height:300px;min-height:300px;flex:none}
-  .chartpanel{flex:none}
-  .chartwrap{height:190px;min-height:190px;flex:none}
-  .panel,.pospanel{flex:none}
-  .reveal .stage{min-height:300px}
-  .rank .podium{gap:10px;padding:4px 0 2px}
-  .pod1 .block{height:92px}.pod2 .block{height:66px}.pod3 .block{height:50px}
-  .srow{grid-template-columns:20px 26px 1fr auto;gap:8px}
-  .srow .bar{display:none}
-  .srow .val{min-width:0}
-  .troffee .trow{grid-template-columns:22px 34px 1fr auto;gap:8px;padding:6px 10px}
-  .troffee .tbarw,.troffee .tchips{display:none}
-  .troffee .tnm{font-size:1rem}
-  .stocks .stcol+.stcol{margin-top:16px}
-  .stocks .slist .strow{padding:7px 0}
-  .mhead{flex-direction:column}
-  .mranks{flex-direction:row;align-items:center;gap:10px}
-  .slide.duvel .dv-h{font-size:1.7rem}
-  .slide.duvel .dv-grid{gap:1.4rem}
-  .slide.prizes .prize-grid{grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
-  .slide.prizes .prize-card{min-height:0;padding:12px 14px;gap:6px}
-  .slide.prizes .prizes-note{margin-top:16px}
-  .slide.appintro .ai-right{margin-top:4px}
-  .slide.appintro .ai-qr{width:190px;height:190px}
-  .act .romnum{font-size:4.6rem}
-  .gvm .verdict{margin-top:16px}
-  .gvm .verdict .num{font-size:2.6rem}
-  .txsplit{gap:16px}
-  .talk .trio{gap:8px}
-}
 </style>
 </head>
 <body>
@@ -662,7 +593,7 @@ function revealSlide(jkey){
     <div class="jersey"><span class="jdot"></span> ${DATA.jersey_display[jkey]||jkey}</div>
     <div class="crit serif">${DATA.jersey_desc[jkey]||''}</div>
     <div class="stage">
-      <div class="cover-card"><div class="q serif">?</div><div class="press">Spatie · of swipe om te onthullen</div></div>
+      <div class="cover-card"><div class="q serif">?</div><div class="press">Druk op spatie om te onthullen</div></div>
       <div class="winner"><div class="halo">${avatar(w.winner,124)}</div>
         <div class="nm serif">${w.winner}</div><div class="ticker">${ticker}</div>
         <div class="stat tab revealStat">+0%</div></div>
@@ -833,7 +764,7 @@ function buildRaceChart(s){
       pts.forEach((pt,i)=>{const ty=ly[i],tx=pt.x+r+6;if(Math.abs(ty-pt.y)>4){ctx.save();ctx.beginPath();ctx.moveTo(pt.x+r,pt.y);ctx.lineTo(tx-2,ty);ctx.strokeStyle=pt.color;ctx.globalAlpha=.35;ctx.lineWidth=1;ctx.stroke();ctx.restore();}ctx.save();ctx.fillStyle=pt.color;ctx.font='700 11px Archivo';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(pt.name+'  '+pt.val.toFixed(1)+'%',tx,ty);ctx.restore();});}
   };
   _raceChart=new Chart(el.getContext('2d'),{type:'line',data:{labels:s.labels,datasets},plugins:[markerPlugin],
-    options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:window.innerWidth<820?80:135}},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:135}},
       plugins:{legend:{display:false},tooltip:{enabled:false}},
       scales:{x:{ticks:{color:'#6B6453',font:{size:10},autoSkip:false,maxRotation:0,callback:function(v){var l=this.getLabelForValue(v);return l.indexOf("'")>=0?(l.indexOf('Q1')===0?'20'+l.slice(-2):''):l;}},grid:{color:'rgba(21,18,12,.06)'},border:{display:false}},
               y:{ticks:{color:'#6B6453',font:{size:10},callback:v=>v.toFixed(0)+'%'},grid:{color:'rgba(21,18,12,.06)'},border:{display:false}}}}});
@@ -993,7 +924,7 @@ function camelHypeSlide(){
       <div class="camel-rig">${dust}${svg}</div>
       <div class="ground"></div>
     </div>
-    <div class="camel-hint">Spatie of swipe voor de race →</div>
+    <div class="camel-hint">Druk op spatie voor de race →</div>
   </div></section>`;}
 
 function marketOverviewSlide(){
@@ -1042,37 +973,6 @@ function appIntroSlide(){
     </div>
   </div></section>`;
 }
-function weddingTeaseSlide(){
-  return `<section class="slide wedtease" data-bg="dark"><div class="slide__inner">
-    <div class="wt-eyebrow"><i></i> Breaking \u00b7 buiten de agenda</div>
-    <h2 class="wt-h">E\u00e9n van ons nam de <span class="u">grootste positie van zijn leven</span> in.</h2>
-    <div class="wt-facts">
-      <div class="wt-fact"><b>Geen aandeel</b><span>Geen ETF. Geen crypto. Niets van dat.</span></div>
-      <div class="wt-fact"><b>Horizon: \u221e</b><span>Levenslang aanhouden \u2014 buy &amp; hold</span></div>
-      <div class="wt-fact"><b>Geen stop-loss</b><span>Verkopen staat niet in het contract</span></div>
-    </div>
-    <div class="wt-hint">Wie? \u25b8 volgende slide</div>
-  </div></section>`;
-}
-function weddingRevealSlide(){
-  const cols=['#D99C1C','#F2D98C','#C13A22','#fff','#1F7A4D'];
-  let conf='';
-  for(let i=0;i<60;i++){conf+='<span class="cf" style="left:'+(Math.random()*100).toFixed(1)+'%;background:'+cols[i%cols.length]+';animation-duration:'+(1.4+Math.random()*1.6).toFixed(2)+'s;animation-delay:'+(Math.random()*.6).toFixed(2)+'s"></span>';}
-  return `<section class="slide reveal wed" data-bg="dark" data-step="1" style="--jc:#D99C1C;--glow:rgba(217,156,28,.5)">
-    <div class="confetti">${conf}</div><div class="slide__inner">
-    <div class="jersey"><span class="jdot"></span> De aankondiging</div>
-    <div class="crit serif">Wie plaatste die order?</div>
-    <div class="stage">
-      <div class="cover-card"><div class="q serif">?</div><div class="press">Spatie · of swipe om te onthullen</div></div>
-      <div class="winner"><div class="halo">${avatar('Pieter',124)}</div>
-        <div class="nm serif">Pieter gaat trouwen \ud83d\udc8d</div>
-        <div class="ticker">Levenslang \u00b7 geen exit \u00b7 geen stop-loss</div>
-        <div class="wed-cheer">Proficiat, Pieter \u2014 de club heft het glas \ud83e\udd42</div>
-        <div class="wed-tags"><span>Beste trade ooit</span><span>Rendement: onmeetbaar</span><span>Dividend: levenslang</span></div>
-      </div>
-    </div>
-  </div></section>`;
-}
 function duvelSlide(){
   const d=DATA.duvel; if(!d) return '';
   const c=d.current||{}; const st=c.standings||[]; const losers=(c.losers&&c.losers.length)?c.losers:(c.loser?[c.loser]:[]); const prop=(c.proposed_losers&&c.proposed_losers.length)?c.proposed_losers:(c.proposed_loser?[c.proposed_loser]:[]); const who=losers.length?losers:prop; const confirmed=losers.length>0; const shared=who.length>1;
@@ -1115,12 +1015,10 @@ function duvelSlide(){
 }
 
 const order=DATA.meta.active;
-const SHOW_APP_INTRO=true;
-const SHOW_WEDDING=true;   // one-off: aankondiging huwelijk Pieter — zet op false na Q2  // one-off app/dashboard intro (slide 2) \u2014 set false to hide next quarter
+const SHOW_APP_INTRO=true;  // one-off app/dashboard intro (slide 2) \u2014 set false to hide next quarter
 const manifest=[
   coverSlide,
   ...(SHOW_APP_INTRO?[appIntroSlide]:[]),
-  ...(SHOW_WEDDING?[weddingTeaseSlide,weddingRevealSlide]:[]),
   duvelSlide,
   ()=>actSlide('I','<span class="u">Marktoverzicht</span>','Eerst de wereld waarin we reden: de gebeurtenissen die de beurzen dit kwartaal bewogen — en hoe de indices eruit kwamen.'),
   marketOverviewSlide,
@@ -1167,10 +1065,6 @@ function go(i){i=Math.max(0,Math.min(slides.length-1,i));slides[cur].classList.r
 function next(){ac();const s=slides[cur];if(s.dataset.step==='1'&&!s.classList.contains('revealed')){doReveal(s);return;}go(cur+1);}
 function prev(){ac();go(cur-1);}
 document.addEventListener('keydown',e=>{if(['ArrowRight',' ','PageDown'].includes(e.key)){e.preventDefault();next();}else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();prev();}else if(e.key==='Home'){go(0);}else if(e.key==='End'){go(slides.length-1);}});
-/* touch: horizontal swipe = prev/next, vertical scroll blijft native */
-let _tx=0,_ty=0,_tt=0;
-document.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;_tx=e.touches[0].clientX;_ty=e.touches[0].clientY;_tt=Date.now();},{passive:true});
-document.addEventListener('touchend',e=>{const t=e.changedTouches[0];if(!t||Date.now()-_tt>700)return;const dx=t.clientX-_tx,dy=t.clientY-_ty;if(Math.abs(dx)<55||Math.abs(dx)<1.8*Math.abs(dy))return;if(e.target.tagName==='CANVAS'||e.target.closest('.racectrl')||e.target.closest('input'))return;dx<0?next():prev();},{passive:true});
 document.addEventListener('click',e=>{if(e.target.closest('.dot')||e.target.closest('.racectrl')||e.target.tagName==='CANVAS'||e.target.closest('.audiobtn'))return;const y=e.clientY/window.innerHeight;if(y>0.8){e.clientX/window.innerWidth<0.5?prev():next();}});
 try{document.title="Kwartaalmeeting · "+DATA.meta.quarter+" "+DATA.meta.year;}catch(e){}
 initCharts();
