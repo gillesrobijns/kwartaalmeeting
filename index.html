@@ -837,7 +837,19 @@ body.privacy-on .eur:hover { filter: none; }
 .spr-kpi-label{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);font-weight:600}
 .spr-kpi-value{font-size:1.15rem;font-weight:700;color:var(--text);line-height:1.25}
 .spr-kpi-sub{font-size:0.66rem;color:var(--text-muted)}
-.spr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(370px,1fr));gap:1rem;align-items:start}
+/* One rhythm for the whole page: the gap under the top bar, between the summary
+   card and the grid, and between grid cards are all 1rem. */
+#page-spreiding.active{display:flex;flex-direction:column;gap:1rem}
+/* A real matrix: fixed column counts (never a lone orphan on a 4-wide row) and
+   grid-auto-rows:1fr so every card is exactly the same size. */
+.spr-grid{display:grid;grid-template-columns:1fr;gap:1rem;grid-auto-rows:1fr}
+@media (min-width:820px){.spr-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1250px){.spr-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Equal-height cards need the body to stretch, so short lists keep their
+   whitespace at the bottom and every card's footer lines up. */
+.spr-grid>.card{display:flex;flex-direction:column}
+.spr-grid>.card>.card-body{flex:1 1 auto;display:flex;flex-direction:column}
+.spr-rows{flex:1 1 auto}
 .spr-dim-head{display:flex;align-items:baseline;justify-content:space-between;gap:0.5rem}
 .spr-dim-head>div:first-child{flex:1 1 auto;min-width:0}
 .spr-dim-hint{font-size:0.64rem;color:var(--text-muted);font-weight:400;margin-top:2px;line-height:1.35}
@@ -859,7 +871,6 @@ body.privacy-on .eur:hover { filter: none; }
 .spr-more:hover{text-decoration:underline}
 .spr-empty{font-size:0.76rem;color:var(--text-muted);line-height:1.6;padding:0.5rem 0}
 @media (max-width:900px){
-  .spr-grid{grid-template-columns:1fr}
   .spr-row{grid-template-columns:9px minmax(0,1fr) 54px 44px;gap:7px}
   .spr-kpis{gap:1.1rem}
 }
