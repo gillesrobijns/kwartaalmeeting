@@ -13,6 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
     "baileys": "7.0.0-rc14",
-    "pino": "^10.0.0"
+    "pino": "^10.0.0",
+    "qrcode": "1.5.4"
   }
 }
