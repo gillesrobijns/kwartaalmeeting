@@ -1,17 +1,21 @@
 {
- "version": "20261006-2140",
+ "version": "20261006-2145",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "fad6b39ceabaf3805b8f1bcc9752eeab59789c99fa372c6e2c4d592302da833b"
+   "sha256": "92345cc23bee1f77b11b8a35001eb87f0b78adbee67037fc707b31f9d84a2f54"
   },
   {
    "name": "clubdata.mjs",
-   "sha256": "8a94c6ce3893e31fef3a1e8281aee58bc14c5bffbb8ca7d2d158ea1200125747"
+   "sha256": "5d347424c9b617d7910b572441ffc1315aea7a6af3ff5170b5f25b92aaf445f3"
   },
   {
    "name": "updater.mjs",
-   "sha256": "7a1914c551ec34e24b34016e8e71332c3fbd19fdbafcf1d085d9309b7797ab77"
+   "sha256": "adf91b02d8ff21cc82b5cefd6d5da542797b702b7353afecef41e8f0ed09d8bd"
+  },
+  {
+   "name": "pricewatch.mjs",
+   "sha256": "e5fffa918ebb579d0597bd8c1d77869f985e29660d8102cdb5a1ec1d8699f73f"
   },
   {
    "name": "persona.md",
@@ -24,6 +28,10 @@
   {
    "name": "claude_strategie.md",
    "sha256": "10774546cf853590742dc34c312d0ce6aa76506c699ab6b72c620f1846d1fe14"
+  },
+  {
+   "name": "tickers.json",
+   "sha256": "eff23736cd1bac535555417cfe3961116c9dc1cd9f15f415d3326ae34e6c1404"
   }
  ]
 }
