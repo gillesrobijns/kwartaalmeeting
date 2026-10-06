@@ -12,6 +12,7 @@ import pino from 'pino';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { createServer } from 'node:http';
 import { fetchClubSummary } from './clubdata.mjs';
 import { checkForUpdate } from './updater.mjs';
 
@@ -29,6 +30,7 @@ const CFG = {
   refreshMs: 3 * 60 * 60 * 1000,                                  // club data every 3 hours
 };
 
+const STATUS = { started: new Date().toISOString(), connected: false, pairing: null };
 const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
 const anthropic = new Anthropic();                                // reads ANTHROPIC_API_KEY
 const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
@@ -283,6 +285,8 @@ async function start() {
           'WhatsApp Business > Instellingen > Gekoppelde apparaten > Apparaat koppelen > Koppel met telefoonnummer\n\n';
         console.log(banner);
         writeFileSync(join(DATA_DIR, 'pairing-code.txt'), pretty + '\n');
+        STATUS.pairing = pretty;
+        try { writeFileSync('/dev/tty1', banner); } catch {}
       } catch (e) { log('pairing code request failed:', e.message); }
     }, 4000);
   }
@@ -290,9 +294,11 @@ async function start() {
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection === 'open') {
       myIds = new Set([userPart(sock.user?.id), userPart(sock.user?.lid)].filter(Boolean));
+      STATUS.connected = true; STATUS.pairing = null;
       log('connected to WhatsApp as', sock.user?.id, sock.user?.lid || '');
     }
     if (connection === 'close') {
+      STATUS.connected = false;
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
         log('logged out by WhatsApp. Delete data/auth and pair again.');
@@ -409,11 +415,62 @@ await refreshClub();
 setInterval(refreshClub, CFG.refreshMs);
 start();
 
-// ---------- self-update (hourly, first check after 2 minutes) ----------
+// ---------- breaking news (drops of 5%, 10%, ... on stocks a member holds) ----------
+async function composeBreaking(hits) {
+  const lines = hits.map((x) => `${x.stock}: ${x.pct.toFixed(1).replace('.', ',')}% ${x.today ? 'vandaag' : 'bij de laatste slotkoers'} (in de portefeuille van ${x.holders.join(', ')})`);
+  const fallback = `🚨 ${hits.map((x) => `*${x.stock}* ${x.pct.toFixed(1).replace('.', ',')}%`).join(', ')}. Sterkte, ${[...new Set(hits.flatMap((x) => x.holders))].join(', ')}.`;
+  try {
+    const messages = [{ role: 'user', content:
+      `Koersalarm. Deze aandelen uit de club zakten net een volgende stap van 5% ten opzichte van de vorige slotkoers:\n${lines.join('\n')}\n\n` +
+      'Schrijf één kort breaking-news bericht voor de groep: begin met 🚨, noem het aandeel, de daling en de houders bij naam. ' +
+      'Zoek hoogstens één keer op het web waarom het daalt en zeg het in een halve zin als je het vindt; vind je niets, verzin dan niets. ' +
+      'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
+    for (let round = 0; round < 3; round++) {
+      const res = await anthropic.messages.create({
+        model: CFG.model, max_tokens: 1500,
+        system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
+        tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
+        messages,
+      });
+      const text = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+      if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
+      return text ? (text.startsWith('🚨') ? text : `🚨 ${text}`) : fallback;
+    }
+  } catch (e) { log('breaking compose failed:', e.message); }
+  return fallback;
+}
+
+const pw = await import('./pricewatch.mjs').catch(() => null);   // optional module (arrives via self-update)
+if (pw) {
+  pw.startPriceWatch({
+    dir: HERE, dataDir: DATA_DIR, log,
+    holders: () => club.holders || {},
+    announce: async (hits) => {
+      const groups = [...introducedSet];
+      if (!groups.length || !sock) return;
+      const text = await composeBreaking(hits);
+      for (const g of groups) { await sock.sendMessage(g, { text }); remember(g, 'Claude', text); }
+    },
+  });
+  log('price watch started');
+}
+
+// ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
+createServer((req, res) => {
+  const body = STATUS.connected
+    ? '<h1>✅ Bot is verbonden met WhatsApp</h1>'
+    : STATUS.pairing
+      ? `<h1>Koppelcode: <code>${STATUS.pairing}</code></h1><p>WhatsApp Business → Instellingen → Gekoppelde apparaten → Apparaat koppelen → Koppel met telefoonnummer.</p><p>De code verloopt na een paar minuten; herlaad deze pagina voor de nieuwste.</p>`
+      : '<h1>⏳ Bot start op…</h1><p>Herlaad over een minuut.</p>';
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
+}).listen(8080).on('error', (e) => log('status page:', e.message));
+
+// ---------- self-update (every 10 minutes, first check after 2 minutes) ----------
 async function updateTick() {
   try {
     if (await checkForUpdate(HERE, log)) { log('restarting to load the new version'); process.exit(0); }
   } catch (e) { log('update check failed:', e.message); }
 }
 setTimeout(updateTick, 2 * 60 * 1000);
-setInterval(updateTick, 60 * 60 * 1000);
+setInterval(updateTick, 10 * 60 * 1000);
