@@ -1,5 +1,5 @@
 {
- "version": "20261006-2125",
+ "version": "20261006-2127",
  "files": [
   {
    "name": "bot.mjs",
@@ -23,7 +23,7 @@
   },
   {
    "name": "claude_strategie.md",
-   "sha256": "f8aed93a4f3c10c3a15a7e24123bc217985af01738655775d61ae3c09c9f3994"
+   "sha256": "10774546cf853590742dc34c312d0ce6aa76506c699ab6b72c620f1846d1fe14"
   }
  ]
 }
