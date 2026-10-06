@@ -4,15 +4,16 @@
 // - Club numbers come from the public dashboard (no euro amounts).
 
 import makeWASocket, {
-  useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers,
+  useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion,
   jidDecode, isJidGroup, normalizeMessageContent,
 } from 'baileys';
 import Anthropic from '@anthropic-ai/sdk';
 import pino from 'pino';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
+import QRCode from 'qrcode';
 import { fetchClubSummary } from './clubdata.mjs';
 import { checkForUpdate } from './updater.mjs';
 
@@ -30,7 +31,7 @@ const CFG = {
   refreshMs: 3 * 60 * 60 * 1000,                                  // club data every 3 hours
 };
 
-const STATUS = { started: new Date().toISOString(), connected: false, pairing: null };
+const STATUS = { started: new Date().toISOString(), connected: false, pairing: null, lastError: null, qr: null, wantCode: false };
 const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
 const anthropic = new Anthropic();                                // reads ANTHROPIC_API_KEY
 const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
@@ -268,16 +269,21 @@ async function start() {
   sock = makeWASocket({
     auth: state,
     version,
-    browser: Browsers.ubuntu('Chrome'),
     logger: pino({ level: 'warn' }),
     markOnlineOnConnect: false,
     syncFullHistory: false,
   });
   sock.ev.on('creds.update', saveCreds);
 
-  if (!state.creds.registered) {
-    if (!CFG.phone) { log('BOT_PHONE is not set: cannot request a pairing code'); process.exit(1); }
-    setTimeout(async () => {
+  if (!state.creds.registered && !CFG.phone) { log('BOT_PHONE is not set: cannot request a pairing code'); process.exit(1); }
+  let pairingRequested = false;
+  // Ask for the pairing code only once WhatsApp is ready for it (first "qr" event), not on a timer.
+  // Default: show the QR on the status page (scan it with WhatsApp Business). A pairing code is only
+  // requested when someone opens /code, because requesting one switches the session to code mode.
+  const requestCode = async () => {
+    if (state.creds.registered || pairingRequested) return;
+    pairingRequested = true;
+    {
       try {
         const code = await sock.requestPairingCode(CFG.phone);
         const pretty = code.match(/.{1,4}/g).join('-');
@@ -287,22 +293,32 @@ async function start() {
         writeFileSync(join(DATA_DIR, 'pairing-code.txt'), pretty + '\n');
         STATUS.pairing = pretty;
         try { writeFileSync('/dev/tty1', banner); } catch {}
-      } catch (e) { log('pairing code request failed:', e.message); }
-    }, 4000);
-  }
+      } catch (e) { log('pairing code request failed:', e.message); STATUS.lastError = `koppelcode aanvragen mislukt: ${e.message}`; }
+    }
+  };
+  STATUS.requestCode = requestCode;
+  sock.ev.on('connection.update', async ({ qr }) => {
+    if (!qr || state.creds.registered) return;
+    STATUS.qr = qr;
+    if (STATUS.wantCode) await requestCode();
+  });
 
   sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
     if (connection === 'open') {
       myIds = new Set([userPart(sock.user?.id), userPart(sock.user?.lid)].filter(Boolean));
-      STATUS.connected = true; STATUS.pairing = null;
+      STATUS.connected = true; STATUS.pairing = null; STATUS.qr = null;
       log('connected to WhatsApp as', sock.user?.id, sock.user?.lid || '');
     }
     if (connection === 'close') {
       STATUS.connected = false;
       const code = lastDisconnect?.error?.output?.statusCode;
-      if (code === DisconnectReason.loggedOut) {
-        log('logged out by WhatsApp. Delete data/auth and pair again.');
-        process.exit(2);
+      if (code === DisconnectReason.loggedOut || code === 403 || code === DisconnectReason.badSession) {
+        // Failed pairing or logged out: wipe the session and restart clean, so a fresh code appears.
+        log(`session rejected (${code}): wiping auth and restarting`);
+        STATUS.lastError = `vorige koppeling mislukt (${code}), nieuwe code volgt`;
+        try { rmSync(join(DATA_DIR, 'auth'), { recursive: true, force: true }); } catch {}
+        setTimeout(() => process.exit(1), 2000);
+        return;
       }
       log('connection closed (', code, '), reconnecting in 5 s');
       setTimeout(start, 5000);
@@ -456,14 +472,17 @@ if (pw) {
 }
 
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
-createServer((req, res) => {
-  const body = STATUS.connected
-    ? '<h1>✅ Bot is verbonden met WhatsApp</h1>'
-    : STATUS.pairing
-      ? `<h1>Koppelcode: <code>${STATUS.pairing}</code></h1><p>WhatsApp Business → Instellingen → Gekoppelde apparaten → Apparaat koppelen → Koppel met telefoonnummer.</p><p>De code verloopt na een paar minuten; herlaad deze pagina voor de nieuwste.</p>`
-      : '<h1>⏳ Bot start op…</h1><p>Herlaad over een minuut.</p>';
+createServer(async (req, res) => {
+  if (req.url.startsWith('/code') && !STATUS.connected) { STATUS.wantCode = true; if (STATUS.requestCode) await STATUS.requestCode(); await new Promise((r) => setTimeout(r, 1500)); }
+  let body;
+  if (STATUS.connected) body = '<h1>✅ Bot is verbonden met WhatsApp</h1>';
+  else if (STATUS.pairing) body = `<h1>Koppelcode: <code>${STATUS.pairing}</code></h1><p>WhatsApp Business → Instellingen → Gekoppelde apparaten → Apparaat koppelen → <b>Koppel met telefoonnummer</b>.</p><p>Mislukt? Herstart de bot niet: open <a href="/">de QR-code</a> en scan die.</p>`;
+  else if (STATUS.qr) {
+    const img = await QRCode.toDataURL(STATUS.qr, { width: 360, margin: 2 });
+    body = `<h1>Scan deze QR-code</h1><p>iPhone: <b>WhatsApp Business</b> → Instellingen → Gekoppelde apparaten → Apparaat koppelen → richt de camera op dit scherm.</p><img src="${img}" alt="QR"><p style="color:#888">De code ververst vanzelf. Liever een koppelcode? <a href="/code">Vraag er een aan</a>.</p><script>setTimeout(()=>location.reload(),15000)</script>`;
+  } else body = '<h1>⏳ Bot start op…</h1><p>Deze pagina herlaadt vanzelf.</p><script>setTimeout(()=>location.reload(),5000)</script>';
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
+  res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}${STATUS.lastError && !STATUS.connected ? `<p style="color:#b45309">${STATUS.lastError}</p>` : ''}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
 }).listen(8080).on('error', (e) => log('status page:', e.message));
 
 // ---------- self-update (every 10 minutes, first check after 2 minutes) ----------
