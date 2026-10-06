@@ -1,9 +1,9 @@
 {
- "version": "20261006-2145",
+ "version": "20261006-2206",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "92345cc23bee1f77b11b8a35001eb87f0b78adbee67037fc707b31f9d84a2f54"
+   "sha256": "e5061186094bccbe154df7be8d4d5c2ed5c084b07035ccc9b664bf9f5d26c4d5"
   },
   {
    "name": "clubdata.mjs",
@@ -23,7 +23,7 @@
   },
   {
    "name": "package.json",
-   "sha256": "7b5263eb40982c6bb3b44e98e36e06e044a495509070614f6aac62e76bc506de"
+   "sha256": "9da41b97924e7efe16b34aa3817b106e0b1a9e964f25ad4f90bc63f866d7d232"
   },
   {
    "name": "claude_strategie.md",
