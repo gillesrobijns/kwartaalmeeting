@@ -137,14 +137,14 @@ async function handlePrivate(msg) {
   writeFileSync(f, '[]');
 }
 
-async function askClaude(jid, asker, question) {
+async function askClaude(jid, asker, question, extra = '') {
   const h = history.get(jid) || [];
   const transcript = h.map((m) => `${m.name}: ${m.text}`).join('\n');
   const messages = [{
     role: 'user',
     content: `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
              `Recente berichten in de groep (oudste eerst):\n${transcript || '(geen)'}\n\n` +
-             `${asker} spreekt jou nu aan met: "${question}"\n\nSchrijf alleen je antwoord voor in de groep.`,
+             `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`,
   }];
   let text = '';
   for (let round = 0; round < 4; round++) {
@@ -261,6 +261,43 @@ async function start() {
   });
 }
 
+// ---------- first introduction (once per group) ----------
+const INTRO_FILE = join(DATA_DIR, 'introduced.json');
+const introducedSet = new Set(existsSync(INTRO_FILE) ? JSON.parse(readFileSync(INTRO_FILE, 'utf8')) : []);
+const introduced = (jid) => introducedSet.has(jid);
+const INTRO_NOTE =
+  'Dit is je allereerste bericht in deze groep: stel jezelf voor. Reageer kort op wat er net gezegd werd. ' +
+  'Open met één scherpe observatie die toont dat je hun portefeuilles al gelezen hebt (iets wat klopt volgens de clubdata). ' +
+  'Vertel dan dat je vanaf Q4 2026 meebelegt met €50.000 virtueel geld, dat je elke maandag beslist en elke aankoop hier meldt met de reden erbij, zodat ze je kunnen uitlachen als het misloopt. ' +
+  'Leg tot slot in één of twee zinnen uit hoe ze je gebruiken: tag @Claude voor cijfers, nieuws of een mening; ideeën voor het dashboard geef je door aan Gilles; eurobedragen en het lopende kwartaal krijgen ze niet. ' +
+  'Hoogstens drie korte alinea\'s, geen opsomming. Stel de aap niet voor: die doet dat zelf meteen na jou.\n\n';
+const MONKEY_INTRO = [
+  '🐒 Oe. Aap hier.',
+  'Computer veel praten. Aap niet praten.',
+  'Computer denken. Aap gooien.',
+  'Aap ook vijftigduizend. Aap niet weten wat dat is.',
+  'Januari: aap boven computer. 🍌',
+  'Wie onder aap? Ad fundum. 🍺',
+].join('\n');
+
+async function introduce(jid, name, text, msg) {
+  introducedSet.add(jid);
+  writeFileSync(INTRO_FILE, JSON.stringify([...introducedSet]));
+  log(`introducing in ${jid}`);
+  await sock.sendPresenceUpdate('composing', jid).catch(() => {});
+  let intro;
+  try { intro = await askClaude(jid, name, text, INTRO_NOTE); } catch (e) { log('intro error:', e.message); }
+  await sock.sendPresenceUpdate('paused', jid).catch(() => {});
+  if (intro) {
+    await sock.sendMessage(jid, { text: `🤖 ${intro}` });
+    countReply();
+    remember(jid, 'Claude', intro);
+  }
+  await new Promise((r) => setTimeout(r, 20000));
+  await sock.sendMessage(jid, { text: MONKEY_INTRO });
+  remember(jid, 'De aap', MONKEY_INTRO);
+}
+
 async function handle(msg) {
   const jid = msg.key.remoteJid;
   if (!jid || msg.key.fromMe) return;
@@ -274,6 +311,7 @@ async function handle(msg) {
   const forBot = isForBot(text, ctx);
   remember(jid, name, text);
 
+  if (!introduced(jid) && (forBot || isForMonkey(text))) { await introduce(jid, name, text, msg); return; }
   if (!forBot && !isForMonkey(text)) return;
   const sender = msg.key.participant || jid;
   if (Date.now() - (cooldown.get(sender) || 0) < 15000) return;   // no spam loops
