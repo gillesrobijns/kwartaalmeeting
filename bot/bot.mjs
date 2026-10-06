@@ -73,11 +73,47 @@ const MONKEY_LINES = [
   'Aap moe. Aap toch gooien. 🎯 {S}. Slapen nu.',
   'Nieuws? Aap niet lezen. Aap gooien. 🎯 {S}. 🍌',
 ];
+// Vocabulary: for every member who finishes a quarter below him, the monkey learns one word
+// (in this order) and uses it from then on. learnWords() is called by the quarter-end job.
+const MONKEY_VOCAB = ['dividend', 'spreiding', 'rendement', 'risico', 'winst', 'koers', 'beurs',
+  'portefeuille', 'analyse', 'strategie', 'correctie', 'hefboom', 'waardering', 'volatiliteit'];
+const VOCAB_FILE = join(DATA_DIR, 'monkey_words.json');
+const learned = () => (existsSync(VOCAB_FILE) ? JSON.parse(readFileSync(VOCAB_FILE, 'utf8')) : []);
+export function learnWords(victims, quarter) {
+  const words = learned();
+  const fresh = [];
+  for (const v of victims) {
+    const w = MONKEY_VOCAB[words.length];
+    if (!w) break;
+    const entry = { word: w, from: v, quarter };
+    words.push(entry); fresh.push(entry);
+  }
+  writeFileSync(VOCAB_FILE, JSON.stringify(words, null, 1));
+  return fresh;                                          // the quarter-end message names them
+}
 function monkeyReply() {
   const pool = club.stocks.length ? club.stocks : ['NVIDIA', "D'IETEREN", 'ASML', 'HACKSAW'];
   const s = pool[Math.floor(Math.random() * pool.length)];
   const line = MONKEY_LINES[Math.floor(Math.random() * MONKEY_LINES.length)];
-  return `🐒 ${line.replace('{S}', `*${s}*`)}`;
+  let out = `🐒 ${line.replace('{S}', `*${s}*`)}`;
+  const words = learned();
+  if (words.length && Math.random() < 0.4) {             // show off a word he learned, and who taught it
+    const w = words[Math.floor(Math.random() * words.length)];
+    out += Math.random() < 0.5 ? ` Aap ${w.word}. Aap slim nu.` : ` Aap kennen woord '${w.word}'. Dank ${w.from}.`;
+  }
+  return out;
+}
+
+// 🍌 reaction under messages that mention a loss (no text, max a few per day)
+const LOSS_RE = /(^|\s)[-−–]\s?\d+([.,]\d+)?\s?%|verlies|verloren|in het rood|rode cijfers|gezakt|zakt|gecrasht|gekelderd|kelder|afgestraft|😭|📉/i;
+const BANANA_MAX_PER_DAY = 4;
+const bananaDay = { day: '', n: 0 };
+async function maybeBanana(jid, msg, text) {
+  if (!LOSS_RE.test(text)) return;
+  if (bananaDay.day !== today()) { bananaDay.day = today(); bananaDay.n = 0; }
+  if (bananaDay.n >= BANANA_MAX_PER_DAY) return;
+  bananaDay.n++;
+  await sock.sendMessage(jid, { react: { text: '🍌', key: msg.key } }).catch(() => {});
 }
 
 // ---------- Claude ----------
@@ -310,6 +346,7 @@ async function handle(msg) {
   const ctx = contextOf(msg);
   const forBot = isForBot(text, ctx);
   remember(jid, name, text);
+  await maybeBanana(jid, msg, text);
 
   if (!introduced(jid) && (forBot || isForMonkey(text))) { await introduce(jid, name, text, msg); return; }
   if (!forBot && !isForMonkey(text)) return;
