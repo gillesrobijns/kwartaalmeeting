@@ -1,0 +1,29 @@
+{
+ "version": "20261006-2125",
+ "files": [
+  {
+   "name": "bot.mjs",
+   "sha256": "baded8bf6906b47457fa0115a848c5733e0155c642b0d912db4adeaa3af4b5e5"
+  },
+  {
+   "name": "clubdata.mjs",
+   "sha256": "8a94c6ce3893e31fef3a1e8281aee58bc14c5bffbb8ca7d2d158ea1200125747"
+  },
+  {
+   "name": "updater.mjs",
+   "sha256": "7a1914c551ec34e24b34016e8e71332c3fbd19fdbafcf1d085d9309b7797ab77"
+  },
+  {
+   "name": "persona.md",
+   "sha256": "6db96ca2f12963278143136b0b855c7a5b868e20837ecf0048fe01711fcedfca"
+  },
+  {
+   "name": "package.json",
+   "sha256": "7b5263eb40982c6bb3b44e98e36e06e044a495509070614f6aac62e76bc506de"
+  },
+  {
+   "name": "claude_strategie.md",
+   "sha256": "f8aed93a4f3c10c3a15a7e24123bc217985af01738655775d61ae3c09c9f3994"
+  }
+ ]
+}
