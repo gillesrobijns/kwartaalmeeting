@@ -22,7 +22,7 @@ mkdirSync(DATA_DIR, { recursive: true });
 const CFG = {
   phone: (process.env.BOT_PHONE || '').replace(/\D/g, ''),        // e.g. 32456631535
   model: process.env.CLAUDE_MODEL || 'claude-sonnet-5-5',
-  dailyLimit: Number(process.env.DAILY_LIMIT || 40),              // max Claude replies per day
+  dailyLimit: Number(process.env.DAILY_LIMIT_V2 || 20),           // max Claude replies per day (all groups)
   groupFilter: (process.env.GROUP_NAME || '').toLowerCase(),        // optional: only this group
   adminPhone: (process.env.ADMIN_PHONE || '').replace(/\D/g, ''),   // Gilles: receives ideas
   historySize: 40,
@@ -106,13 +106,14 @@ function monkeyReply() {
 
 // 🍌 reaction under messages that mention a loss (no text, max a few per day)
 const LOSS_RE = /(^|\s)[-−–]\s?\d+([.,]\d+)?\s?%|verlies|verloren|in het rood|rode cijfers|gezakt|zakt|gecrasht|gekelderd|kelder|afgestraft|😭|📉/i;
-const BANANA_MAX_PER_DAY = 4;
-const bananaDay = { day: '', n: 0 };
+const BANANA_MAX_PER_DAY = 2;
+const bananaDay = { day: '', n: 0, who: new Set() };
 async function maybeBanana(jid, msg, text) {
   if (!LOSS_RE.test(text)) return;
-  if (bananaDay.day !== today()) { bananaDay.day = today(); bananaDay.n = 0; }
-  if (bananaDay.n >= BANANA_MAX_PER_DAY) return;
-  bananaDay.n++;
+  if (bananaDay.day !== today()) { bananaDay.day = today(); bananaDay.n = 0; bananaDay.who = new Set(); }
+  const who = msg.key.participant || jid;
+  if (bananaDay.n >= BANANA_MAX_PER_DAY || bananaDay.who.has(who)) return;   // never the same person twice a day
+  bananaDay.n++; bananaDay.who.add(who);
   await sock.sendMessage(jid, { react: { text: '🍌', key: msg.key } }).catch(() => {});
 }
 
@@ -244,7 +245,20 @@ function isForBot(text, ctx) {
   const named = /(^|[\s@])claude\b/i.test(text);
   return mentioned || repliedToBot || named;
 }
-const isForMonkey = (text) => /(^|[\s@])(aap|aapje|de aap)\b|🐒/i.test(text) && !/(^|[\s@])claude\b/i.test(text);
+// The monkey only answers when spoken TO ("aap, …", "@aap", "🐒 …", "… aap?"), not when merely mentioned.
+const isForMonkey = (text) => /^\s*(@?(de\s+)?aap(je)?\b|🐒)|\baap(je)?\s*\?\s*$/i.test(text) && !/(^|[\s@])claude\b/i.test(text);
+
+// Anti-spam: per-group sliding windows. Over the limit, Claude reacts ⏳ instead of answering; the monkey stays silent.
+const LIMITS = { claude: { n: 6, ms: 60 * 60 * 1000 }, monkey: { n: 1, ms: 30 * 60 * 1000 }, monkeyDay: { n: 4, ms: 24 * 60 * 60 * 1000 } };
+const windows = new Map();
+function allow(kind, jid) {
+  const { n, ms } = LIMITS[kind];
+  const key = `${kind}:${jid}`;
+  const now = Date.now();
+  const hits = (windows.get(key) || []).filter((t) => now - t < ms);
+  if (hits.length >= n) { windows.set(key, hits); return false; }
+  hits.push(now); windows.set(key, hits); return true;
+}
 
 async function start() {
   const { state, saveCreds } = await useMultiFileAuthState(join(DATA_DIR, 'auth'));
@@ -348,19 +362,24 @@ async function handle(msg) {
   remember(jid, name, text);
   await maybeBanana(jid, msg, text);
 
-  if (!introduced(jid) && (forBot || isForMonkey(text))) { await introduce(jid, name, text, msg); return; }
+  if (!introduced(jid) && (forBot || /(^|[\s@])(de\s+)?aap(je)?\b|🐒/i.test(text))) { await introduce(jid, name, text, msg); return; }
   if (!forBot && !isForMonkey(text)) return;
   const sender = msg.key.participant || jid;
   if (Date.now() - (cooldown.get(sender) || 0) < 15000) return;   // no spam loops
   cooldown.set(sender, Date.now());
 
   if (!forBot) {
+    if (!allow('monkey', jid) || !allow('monkeyDay', jid)) return;
     const reply = monkeyReply();
     await sock.sendMessage(jid, { text: reply }, { quoted: msg });
     remember(jid, 'De aap', reply);
     return;
   }
 
+  if (!allow('claude', jid)) {
+    await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+    return;
+  }
   if (repliesToday() >= CFG.dailyLimit) {
     if (repliesToday() === CFG.dailyLimit) {
       countReply();
