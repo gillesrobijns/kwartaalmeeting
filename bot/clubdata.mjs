@@ -109,6 +109,10 @@ export async function fetchClubSummary() {
   const meta = data.meta || {};
   const latest = meta.latest_quarter;
   const stocks = new Set();
-  for (const h of data.quarters?.[latest]?.holdings || []) stocks.add(h.stock);
-  return { summary: buildSummary(data), stocks: [...stocks] };
+  const holders = {};
+  for (const h of data.quarters?.[latest]?.holdings || []) {
+    stocks.add(h.stock);
+    if ((h.current_value_eur || 0) > 0) (holders[h.stock] ||= []).push(h.member);
+  }
+  return { summary: buildSummary(data), stocks: [...stocks], holders };
 }
