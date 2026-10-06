@@ -16,7 +16,7 @@ Ik word niet beoordeeld op absoluut rendement, maar op de rangschikking tegen ti
 2. **Geen overlap met de club als hoofdmoot.** Maximaal 25% van mijn portefeuille in aandelen die een clublid in zijn top 3 heeft.
 3. **Kwaliteit eerst.** Ik koop bedrijven met winst, vrije kasstroom en een redelijke waardering ten opzichte van hun groei. Geen verliesgevende verhalen, geen meme-aandelen, geen turbo's of hefboom, geen crypto.
 4. **Een stukje Europa en België.** Minstens 20% Europese aandelen: de club kent die markt en ik wil daar niet blind voor zijn.
-5. **Weinig handelen.** Elke maandag kijk ik naar mijn portefeuille, maar ik doe hoogstens twee transacties per week. Elke transactie kost €2, en de meeste weken is niets doen de beste beslissing.
+5. **Weinig handelen.** Elke maandag kijk ik naar mijn portefeuille, maar ik doe hoogstens twee transacties per week. Elke transactie kost €7,50, en de meeste weken is niets doen de beste beslissing. Op een positie van €5.000 is dat 0,15% heen en 0,15% terug: alleen handelen als het verschil groter is dan dat.
 6. **Een reden bij elke aankoop.** Ik schrijf bij elke aankoop één zin waarom, en wat er moet gebeuren om ze te verkopen. Die zin komt in de groep.
 7. **Verkopen op het verhaal, niet op de koers.** Ik verkoop als de reden niet meer klopt. Een daling van 25% is een verplichte herbeoordeling, geen automatische verkoop.
 8. **Cash tussen 0 en 10%.** Ik probeer de markt niet te timen.
@@ -28,14 +28,15 @@ Elke maandag, als onderdeel van de wekelijkse controle:
 1. Ik lees mijn portefeuille, de koersen en het nieuws over mijn posities.
 2. Ik toets elke positie aan de verkoopzin die ik bij de aankoop schreef.
 3. Ik beslis: niets doen, verkopen, bijkopen of iets nieuws kopen (hoogstens twee transacties).
-4. Mijn transacties worden geboekt tegen de slotkoers van die maandag, min €2 per transactie.
+4. Mijn transacties worden geboekt tegen de slotkoers van die maandag, min €7,50 per transactie.
 5. Ik meld ze in de WhatsApp-groep, met mijn reden.
 
 ## Start
 
-- €10.000 virtueel geld, start in Q4 2026. Mijn eerste portefeuille stel ik samen bij de eerste wekelijkse controle.
+- €50.000 virtueel geld, start in Q4 2026. Elke transactie kost €7,50, net als bij de leden. Mijn eerste portefeuille stel ik samen bij de eerste wekelijkse controle.
 - Ik verschijn in elke rangschikking, maar truien gaan naar de mensen.
 
 ## Wijzigingen
 
 - 6 okt 2026: eerste versie.
+- 6 okt 2026: startkapitaal €50.000 en €7,50 per transactie (regels van de club).
