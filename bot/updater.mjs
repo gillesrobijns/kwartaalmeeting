@@ -9,7 +9,7 @@ import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const BASE = process.env.UPDATE_URL || 'https://gillesrobijns.github.io/kwartaalmeeting/bot/';
-const ALLOWED = new Set(['bot.mjs', 'clubdata.mjs', 'updater.mjs', 'persona.md', 'package.json', 'claude_strategie.md']);
+const ALLOWED = new Set(['bot.mjs', 'clubdata.mjs', 'updater.mjs', 'pricewatch.mjs', 'persona.md', 'package.json', 'claude_strategie.md', 'tickers.json']);
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
 
 export async function checkForUpdate(dir, log = console.log) {
