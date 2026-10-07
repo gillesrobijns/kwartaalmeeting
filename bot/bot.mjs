@@ -149,6 +149,38 @@ async function maybeMonkeyButtIn(jid, chance, lines, name = '') {
   log('monkey butted in');
 }
 
+// When someone talks TO the aap, he answers in caveman Dutch with caveman humor (short AI call,
+// falls back to the fixed lines). He only knows the words he learned from members below him.
+const MONKEY_PERSONA = `Je bent de beleggende aap, lid 12 van de Kwartaalmeeting, een beleggingsclub van tien Vlaamse vrienden (Gilles, Pieter, Robbe, Arno, Haakon, Joran, Kevin, Jeff, Niels, Tom) plus Claude (de computer, lid 11).
+Je belegt volledig willekeurig: elk kwartaal tien aandelen, gekozen met een banaan, een kokosnoot, een vlo of door op de laptop te zitten. Wie onder jou eindigt, drinkt een ad fundum.
+
+Hoe je praat: holbewonerstaal. Korte stukjes van 2 tot 5 woorden. Altijd derde persoon ("Aap willen", nooit "ik"). Werkwoorden NIET vervoegd: "Aap eten banaan", "Robbe kopen hoog". Geen bijzinnen, geen moeilijke woorden. Hoogstens 4 stukjes in totaal.
+Je humor: holbewonershumor. Slapstick en lichaamsdingen (banaan, drol gooien, vlooien, krabben, boeren, kokosnoot op hoofd), grot, vuur, boom, bang van de computer, trots op je eigen domheid. Je plaagt de mensen bij naam als ze iets doms vragen of slecht beleggen, en je bent jaloers op Claude. Droog en absurd, nooit gemeen.
+Je snapt NIETS van beleggen en dat is je kracht. Moeilijke beleggingswoorden ken je niet: hoor je er één, dan snap je het niet ("Rente? Aap niet kennen. Rente lekker?"). Alleen deze woorden ken je wel, want leden leerden ze je: {WORDS}.
+Cijfers verzin je niet. Aap kan niet tellen tot meer dan tien.
+Vraagt iemand iets vies, gemeens of ongepasts: aap doet dom en gooit een drol naar de vraag. Nooit grappen over echte mensen buiten de club, ziekte, dood of groepen mensen.
+Vraagt iemand wat hij moet kopen: aap kiest op zijn manier, bijvoorbeeld {S}.
+Schrijf alleen wat de aap zegt, zonder "Aap:" ervoor.`;
+async function monkeyAnswer(jid, asker, question) {
+  try {
+    const words = learned().map((w) => w.word);
+    const pool = club.stocks.length ? club.stocks : ['NVIDIA'];
+    const s = pool[Math.floor(Math.random() * pool.length)];
+    const h = (history.get(jid) || []).slice(-8).map((m) => `${m.name}: ${m.text}`).join('\n');
+    let own = '';
+    try { const L = trader?.ledger(); if (L) own = [...new Set(L.orders.filter((o) => o.bot === 'Aap' && o.status !== 'failed').slice(-10).map((o) => o.name))].join(', '); } catch {}
+    const res = await anthropic.messages.create({
+      model: CFG.model, max_tokens: 300, thinking: { type: 'between_tools' },     // no thinking: short and fast
+      system: MONKEY_PERSONA.replace('{WORDS}', words.length ? words.join(', ') : 'nog geen enkel woord').replace('{S}', `*${s}*`) +
+        (own ? `\nJouw eigen aandelen nu (mag je trots noemen): ${own}.` : ''),
+      messages: [{ role: 'user', content: `Laatste berichten in de chat:\n${h || '(geen)'}\n\n${asker} zegt tegen jou: "${question}"\n\nAntwoord als de aap.` }],
+    });
+    const t = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim().replace(/^\s*(🐒\s*)?\*?aap\*?\s*:\s*/i, '');
+    if (t) return MONKEY_TAG + t;
+  } catch (e) { log('monkey AI failed:', e.message); }
+  return monkeyReply();
+}
+
 // 🍌 reaction under messages that mention a loss (no text, max a few per day)
 const LOSS_RE = /(^|\s)[-−–]\s?\d+([.,]\d+)?\s?%|verlies|verloren|in het rood|rode cijfers|gezakt|zakt|gecrasht|gekelderd|kelder|afgestraft|😭|📉/i;
 const BANANA_MAX_PER_DAY = 2;
@@ -303,7 +335,7 @@ async function privateChat(msg, text) {
   remember(from, name, text);
 
   if (isForMonkey(text)) {                                          // "aap, ..." works privately too
-    const reply = monkeyReply();
+    const reply = await monkeyAnswer(from, name, text);
     await sock.sendMessage(from, { text: reply }, { quoted: msg });
     remember(from, 'De aap', reply);
     return;
@@ -413,7 +445,7 @@ function isForBot(text, ctx) {
 const isForMonkey = (text) => /^\s*(@?(de\s+)?aap(je)?\b|🐒)|\baap(je)?\s*\?\s*$/i.test(text) && !CLAUDE_NAME.test(text);
 
 // Anti-spam: per-group sliding windows. Over the limit, Claude reacts ⏳ instead of answering; the monkey stays silent.
-const LIMITS = { claude: { n: 6, ms: 60 * 60 * 1000 }, monkey: { n: 1, ms: 30 * 60 * 1000 }, monkeyDay: { n: 4, ms: 24 * 60 * 60 * 1000 } };
+const LIMITS = { claude: { n: 6, ms: 60 * 60 * 1000 }, monkey: { n: 2, ms: 30 * 60 * 1000 }, monkeyDay: { n: 8, ms: 24 * 60 * 60 * 1000 } };
 const windows = new Map();
 function allow(kind, jid) {
   const { n, ms } = LIMITS[kind];
@@ -556,7 +588,7 @@ async function handle(msg) {
 
   if (!forBot) {
     if (!allow('monkey', jid) || !allow('monkeyDay', jid)) return;
-    const reply = monkeyReply();
+    const reply = await monkeyAnswer(jid, name, text);
     await sock.sendMessage(jid, { text: reply }, { quoted: msg });
     remember(jid, 'De aap', reply);
     return;
@@ -608,7 +640,7 @@ async function composeBreaking(hits) {
       'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
     for (let round = 0; round < 3; round++) {
       const res = await anthropic.messages.create({
-        model: CFG.model, max_tokens: 1500,
+        model: CFG.model, max_tokens: 1500, thinking: { type: 'between_tools' },
         system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
         tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
         messages,
@@ -639,7 +671,7 @@ if (pw) {
 // ---------- phase 2/3: Claude and the aap invest, automatic messages, pdfs (all optional) ----------
 async function composeShort(prompt) {
   const res = await anthropic.messages.create({
-    model: CFG.model, max_tokens: 600,
+    model: CFG.model, max_tokens: 600, thinking: { type: 'between_tools' },
     system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: prompt }],
   });
