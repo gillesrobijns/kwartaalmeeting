@@ -95,6 +95,28 @@ function remember(jid, name, text) {
   saveHistory();
 }
 
+// ---------- text repair (mojibake) ----------
+// The model sometimes writes an emoji as garbled characters, e.g. "ЁЯЪи" or "ðŸš¨" instead of 🚨 (UTF-8 bytes read
+// as an old DOS/Windows code page). Every outgoing text passes through fixText: a run of such characters that turns
+// back into valid UTF-8 is restored, and a doubled emoji ("🚨 🚨") is collapsed. Normal accents (één, ë) never form
+// valid UTF-8 this way, so they are left alone.
+const MOJI_MAPS = ['ibm866', 'windows-1252'].map((enc) => {
+  const d = new TextDecoder(enc), m = new Map();
+  for (let b = 0x80; b < 0x100; b++) { const c = d.decode(Uint8Array.of(b)); if (c !== '�' && !m.has(c)) m.set(c, b); }
+  const cls = [...m.keys()].map((c) => c.replace(/[\]\\^-]/g, '\\$&')).join('');
+  return { m, re: new RegExp(`[${cls}]{2,}`, 'g') };
+});
+function fixText(s) {
+  if (typeof s !== 'string' || !s) return s;
+  for (const { m, re } of MOJI_MAPS) {
+    s = s.replace(re, (run) => {
+      try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from([...run].map((c) => m.get(c)))); }
+      catch { return run; }
+    });
+  }
+  return s.replace(/(\p{Extended_Pictographic}️?)(\s*\1)+/gu, '$1');
+}
+
 // ---------- who is talking ----------
 // Every group message starts with the speaker, so everyone sees who answers.
 const CLAUDE_TAG = '🤖 Claude: ';
@@ -707,6 +729,8 @@ async function start() {
     syncFullHistory: false,
   });
   sock.ev.on('creds.update', saveCreds);
+  { const send = sock.sendMessage.bind(sock);                       // repair garbled emoji in every outgoing text
+    sock.sendMessage = (jid, content, opts) => send(jid, content && typeof content.text === 'string' ? { ...content, text: fixText(content.text) } : content, opts); }
 
   if (!state.creds.registered && !CFG.phone) { log('BOT_PHONE is not set: cannot request a pairing code'); process.exit(1); }
   let pairingRequested = false;
