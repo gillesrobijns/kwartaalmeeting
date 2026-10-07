@@ -331,16 +331,35 @@ async function composeCatchup(jid) {
     if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
     break;
   }
-  const a = text.indexOf('{'), b = text.lastIndexOf('}');
-  const out = JSON.parse(text.slice(a, b + 1));
+  const out = extractJson(text, 'gemist');
+  if (!out) { log('catchup: no JSON in answer:', text.slice(0, 400)); throw new Error('geen bruikbaar antwoord'); }
   return { items: Array.isArray(out.gemist) ? out.gemist : [], text: String(out.bericht || '').trim() };
+}
+// The model sometimes adds text (or a second object) around its JSON: take the first balanced {...} that parses and has the key.
+function extractJson(text, key) {
+  for (let s = text.indexOf('{'); s !== -1; s = text.indexOf('{', s + 1)) {
+    let depth = 0, inStr = false, esc = false;
+    for (let i = s; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\' && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        try { const o = JSON.parse(text.slice(s, i + 1)); if (o && typeof o === 'object' && key in o) return o; } catch {}
+        break;
+      }
+    }
+  }
+  return null;
 }
 async function catchupPreview(to) {
   const jid = [...introducedSet].find((g) => (history.get(g) || []).length);
   if (!jid) { await sock.sendMessage(to, { text: CLAUDE_TAG + 'Ik vind geen groepsgesprek om na te kijken.' }); return; }
   await sock.sendMessage(to, { text: CLAUDE_TAG + 'Even kijken wat ik gemist heb…' });
   let r;
-  try { r = await composeCatchup(jid); }
+  try { r = await composeCatchup(jid).catch(() => composeCatchup(jid)); }
   catch (e) { log('catchup failed:', e.message); await sock.sendMessage(to, { text: CLAUDE_TAG + `Dat lukte niet (${e.message}). Probeer het zo opnieuw met /gemist.` }); return; }
   if (!r.items.length || !r.text) { catchup = null; await sock.sendMessage(to, { text: CLAUDE_TAG + `✅ Niets gemist in de laatste ${(history.get(jid) || []).length} berichten van de groep.` }); return; }
   catchup = { jid, text: asClaude(r.text), items: r.items };
