@@ -58,6 +58,18 @@ function countReply() {
 }
 const repliesToday = () => usage[today()] || 0;
 
+// ---------- free mode: Gilles lifts Claude's group limits for a while (private "/vrij", "/vrij 3", "/rem") ----------
+// While free: no hourly limit in the group, daily cap raised to FREE_DAILY_CAP (cost guard). The monkey keeps his limits.
+const FREE_FILE = join(DATA_DIR, 'free.json');
+const FREE_DEFAULT_UNTIL = Date.parse('2026-10-08T00:00:00+02:00');   // launch day: free until midnight, then normal
+const FREE_DAILY_CAP = 100;
+let freeUntil = FREE_DEFAULT_UNTIL;
+try { if (existsSync(FREE_FILE)) freeUntil = Number(JSON.parse(readFileSync(FREE_FILE, 'utf8')).until) || 0; } catch {}
+const isFree = () => Date.now() < freeUntil;
+function setFree(until) { freeUntil = until; writeFileSync(FREE_FILE, JSON.stringify({ until, at: new Date().toISOString() })); }
+const dailyLimit = () => (isFree() ? Math.max(CFG.dailyLimit, FREE_DAILY_CAP) : CFG.dailyLimit);
+const hhmm = (t) => new Date(t).toLocaleTimeString('nl-BE', { timeZone: 'Europe/Brussels', hour: '2-digit', minute: '2-digit' });
+
 // ---------- chat memory per group (survives restarts) ----------
 const HISTORY_FILE = join(DATA_DIR, 'history.json');
 const history = new Map();                                        // jid -> [{name, text}]
@@ -297,6 +309,20 @@ async function verdictPost(to) {
 async function adminCommand(from, text) {
   if (from !== adminJid()) return false;
   if (/^\/(meeting|aap)\b/.test(text)) { await verdictPreview(from); return true; }
+  const vrij = text.match(/^\/vrij(?:\s+(\d+(?:[.,]\d+)?))?\s*$/);
+  if (vrij) {
+    const hours = Math.min(24, Number((vrij[1] || '3').replace(',', '.')) || 3);
+    setFree(Date.now() + hours * 3600e3);
+    log(`free mode until ${new Date(freeUntil).toISOString()}`);
+    await sock.sendMessage(from, { text: CLAUDE_TAG + `🔓 Ik ben vrij tot ${hhmm(freeUntil)}: geen uurlimiet in de groep, max. ${FREE_DAILY_CAP} antwoorden vandaag. Stuur /rem om terug te gaan.` });
+    return true;
+  }
+  if (/^\/rem\b/.test(text)) {
+    setFree(0);
+    log('free mode off');
+    await sock.sendMessage(from, { text: CLAUDE_TAG + `🔒 Terug naar normaal: ${LIMITS.claude.n} antwoorden per uur, ${CFG.dailyLimit} per dag.` });
+    return true;
+  }
   if (verdict.pending && /^(ja|yes|ok|post)\b/.test(text)) { await verdictPost(from); return true; }
   if (verdict.pending && /^opnieuw\b/.test(text)) { verdict.pending = null; await verdictPreview(from); return true; }
   if ((verdict.pending || verdict.armed) && /^(nee|stop)\b/.test(text)) {
@@ -731,12 +757,12 @@ async function handle(msg) {
     return;
   }
 
-  if (!allow('claude', jid)) {
+  if (!isFree() && !allow('claude', jid)) {
     await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } }).catch(() => {});
     return;
   }
-  if (repliesToday() >= CFG.dailyLimit) {
-    if (repliesToday() === CFG.dailyLimit) {
+  if (repliesToday() >= dailyLimit()) {
+    if (repliesToday() === dailyLimit()) {
       countReply();
       await sock.sendMessage(jid, { text: CLAUDE_TAG + 'Ik heb vandaag genoeg gepraat, mijn budget is op. Morgen ben ik er weer! 🍺' });
     }
