@@ -225,6 +225,12 @@ async function maybeBanana(jid, msg, text) {
 }
 
 // ---------- Claude ----------
+// Only the text after the last tool step is the answer; text before it is narration ("even zoeken...").
+function finalText(content) {
+  let last = -1;
+  content.forEach((c, i) => { if (c.type !== 'text' && c.type !== 'thinking' && c.type !== 'redacted_thinking') last = i; });
+  return content.slice(last + 1).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+}
 const TOOLS = [
   { type: 'web_search_20260318', name: 'web_search', max_uses: 3 },
   {
@@ -419,7 +425,7 @@ async function askClaude(jid, asker, question, extra = '', priv = false) {
     });
     const u = res.usage || {};
     log(`claude: in=${u.input_tokens} cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} out=${u.output_tokens} searches=${u.server_tool_use?.web_search_requests || 0} stop=${res.stop_reason}`);
-    text = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+    text = finalText(res.content);
     if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
     if (res.stop_reason !== 'tool_use') break;
     messages.push({ role: 'assistant', content: res.content });
@@ -666,7 +672,8 @@ async function composeBreaking(hits) {
     const messages = [{ role: 'user', content:
       `Koersalarm. Deze aandelen uit de club zakten net een volgende stap van 5% ten opzichte van de vorige slotkoers:\n${lines.join('\n')}\n\n` +
       'Schrijf één kort breaking-news bericht voor de groep: begin met 🚨, noem het aandeel, de daling en de houders bij naam. ' +
-      'Zoek hoogstens één keer op het web waarom het daalt en zeg het in een halve zin als je het vindt; vind je niets, verzin dan niets. ' +
+      'Zoek op het web waarom het daalt en zeg het in een halve zin als je het vindt. Vind je niets, zeg dan gewoon dat de reden nog niet bekend is en verzin niets. ' +
+      'Vertel nooit dat of hoe vaak je zocht. ' +
       'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
     for (let round = 0; round < 3; round++) {
       const res = await anthropic.messages.create({
@@ -675,7 +682,7 @@ async function composeBreaking(hits) {
         tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
         messages,
       });
-      const text = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+      const text = finalText(res.content);
       if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
       return text ? (text.startsWith('🚨') ? text : `🚨 ${text}`) : fallback;
     }
