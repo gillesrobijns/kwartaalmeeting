@@ -38,9 +38,14 @@ const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
 
 // ---------- club data ----------
 let club = { summary: 'CLUBDATA: (nog niet geladen)', stocks: [] };
+let trader = null, autopost = null, pdfLib = null;                // phase 2/3 modules, loaded below (optional)
 async function refreshClub() {
   try { club = await fetchClubSummary(); log(`club data loaded (${club.summary.length} chars, ${club.stocks.length} stocks)`); }
   catch (e) { log('club data refresh failed:', e.message); }
+  if (trader) {
+    try { const t = await trader.summaryText(); if (t) club.summary += `\n\n${t}`; }
+    catch (e) { log('bot portfolios summary failed:', e.message); }
+  }
 }
 
 // ---------- usage counter (survives restarts) ----------
@@ -114,6 +119,36 @@ function monkeyReply() {
   return out;
 }
 
+// Now and then the aap butts in by himself: after a Claude answer, or when someone reports a loss.
+// Fixed lines (free), at most 2 per day, and only within his normal limits (1 per half hour, 4 per day).
+const MONKEY_BUTT_IN = [
+  'Computer weer veel woorden. Aap één woord: banaan. 🍌',
+  'Aap lezen dat. Aap niet snappen. Aap toch lachen.',
+  'Computer slim. Aap rijk. Wacht maar.',
+  'Aap ook mening. Mening is banaan.',
+  'Aap luisteren. Aap knikken. Aap niets onthouden.',
+  'Hoe meer computer praten, hoe meer aap kopen. Logisch.',
+];
+const MONKEY_LOSS = [
+  'Aap zien rood bij {N}. Aap ruiken angst. 🍌',
+  'Aap ook verlies vroeger. Aap toen krant opeten. Probleem weg. Probeer, {N}.',
+  '{N} denken lang. {N} verliezen. Aap denken niet. Aap kopen. Hmm.',
+  'Oe oe. {N} kopen hoog, verkopen laag. Zelfs aap weten: omgekeerd.',
+  'Aap geven {N} banaan. Troost. Niet opeten. Is ook belegging.',
+];
+const buttIn = { day: '', n: 0 };
+async function maybeMonkeyButtIn(jid, chance, lines, name = '') {
+  if (Math.random() > chance) return;
+  if (buttIn.day !== today()) { buttIn.day = today(); buttIn.n = 0; }
+  if (buttIn.n >= 2 || !allow('monkey', jid) || !allow('monkeyDay', jid)) return;
+  buttIn.n++;
+  await new Promise((r) => setTimeout(r, 15000 + Math.random() * 25000));
+  const text = MONKEY_TAG + lines[Math.floor(Math.random() * lines.length)].replaceAll('{N}', name || 'mens');
+  await sock.sendMessage(jid, { text }).catch(() => {});
+  remember(jid, 'De aap', text);
+  log('monkey butted in');
+}
+
 // 🍌 reaction under messages that mention a loss (no text, max a few per day)
 const LOSS_RE = /(^|\s)[-−–]\s?\d+([.,]\d+)?\s?%|verlies|verloren|in het rood|rode cijfers|gezakt|zakt|gecrasht|gekelderd|kelder|afgestraft|😭|📉/i;
 const BANANA_MAX_PER_DAY = 2;
@@ -142,7 +177,43 @@ const TOOLS = [
       required: ['van', 'idee'],
     },
   },
+  {
+    name: 'pdf_maken',
+    description: 'Maak een pdf-rapportje en stuur het in dit gesprek. Alleen als iemand uitdrukkelijk om een pdf, rapport of verslag vraagt. ' +
+      'Schrijf de inhoud zelf, kort en helder, met cijfers uit de clubdata (procenten, geen eurobedragen). Je antwoord in de chat is daarna één korte zin.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titel: { type: 'string' },
+        ondertitel: { type: 'string' },
+        secties: {
+          type: 'array', maxItems: 8,
+          items: { type: 'object', properties: { kop: { type: 'string' }, tekst: { type: 'string', description: 'Mag <b>vet</b> bevatten' }, punten: { type: 'array', items: { type: 'string' } } } },
+        },
+        tabel: {
+          type: 'object',
+          properties: { kop: { type: 'string' }, kolommen: { type: 'array', items: { type: 'string' } }, rijen: { type: 'array', items: { type: 'array', items: { type: 'string' } } } },
+        },
+        bestandsnaam: { type: 'string', description: 'Kort, zonder .pdf' },
+      },
+      required: ['titel', 'secties'],
+    },
+  },
 ];
+
+// PDF reports on request: at most 4 per day in total.
+const PDF_FILE = join(DATA_DIR, 'pdf_usage.json');
+async function makePdf(jid, input) {
+  if (!pdfLib) return 'Pdf maken lukt nu niet (module ontbreekt).';
+  const u = existsSync(PDF_FILE) ? JSON.parse(readFileSync(PDF_FILE, 'utf8')) : {};
+  if ((u[today()] || 0) >= 4) return 'Limiet bereikt: vandaag al vier pdf\'s gemaakt. Zeg dat het morgen weer kan.';
+  const buf = await pdfLib.renderReport(input);
+  const name = String(input.bestandsnaam || input.titel || 'Rapport').replace(/[\\/:*?"<>|]/g, '').slice(0, 60);
+  await sock.sendMessage(jid, { document: buf, mimetype: 'application/pdf', fileName: `${name}.pdf` });
+  writeFileSync(PDF_FILE, JSON.stringify({ [today()]: (u[today()] || 0) + 1 }));
+  log(`pdf sent (${buf.length} bytes)`);
+  return 'De pdf is verstuurd.';
+}
 
 async function forwardIdea({ van, idee }) {
   const admin = adminJid();
@@ -276,7 +347,7 @@ async function askClaude(jid, asker, question, extra = '', priv = false) {
   for (let round = 0; round < 4; round++) {
     const res = await anthropic.messages.create({
       model: CFG.model,
-      max_tokens: 2000,
+      max_tokens: 4000,
       system: [
         { type: 'text', text: persona },
         { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } },
@@ -296,6 +367,8 @@ async function askClaude(jid, asker, question, extra = '', priv = false) {
       let out = 'Onbekende tool.';
       if (block.name === 'idee_doorsturen') {
         try { out = await forwardIdea(block.input); } catch (e) { out = `Doorsturen mislukt: ${e.message}`; }
+      } else if (block.name === 'pdf_maken') {
+        try { out = await makePdf(jid, block.input); } catch (e) { log('pdf failed:', e.message); out = `Pdf maken mislukt: ${e.message}`; }
       }
       results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
     }
@@ -473,6 +546,7 @@ async function handle(msg) {
   const forBot = isForBot(text, ctx);
   remember(jid, name, text);
   await maybeBanana(jid, msg, text);
+  if (introduced(jid) && !forBot && !isForMonkey(text) && LOSS_RE.test(text)) maybeMonkeyButtIn(jid, 0.25, MONKEY_LOSS, name.split(' ')[0]);
 
   if (!introduced(jid) && (forBot || /(^|[\s@])(de\s+)?aap(je)?\b|🐒/i.test(text))) { await introduce(jid, name, text, msg); return; }
   if (!forBot && !isForMonkey(text)) return;
@@ -515,6 +589,7 @@ async function handle(msg) {
   await sock.sendMessage(jid, { text: reply }, { quoted: msg });
   countReply();
   remember(jid, 'Claude', answer);
+  maybeMonkeyButtIn(jid, 0.12, MONKEY_BUTT_IN);                   // not awaited: never delays the bot
 }
 
 await refreshClub();
@@ -561,8 +636,51 @@ if (pw) {
   log('price watch started');
 }
 
+// ---------- phase 2/3: Claude and the aap invest, automatic messages, pdfs (all optional) ----------
+async function composeShort(prompt) {
+  const res = await anthropic.messages.create({
+    model: CFG.model, max_tokens: 600,
+    system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+}
+pdfLib = await import('./pdf.mjs').catch((e) => { log('pdf module not loaded:', e.message); return null; });
+const traderMod = await import('./trader.mjs').catch((e) => { log('trader module not loaded:', e.message); return null; });
+if (traderMod) {
+  trader = traderMod.createTrader({
+    dir: HERE, dataDir: DATA_DIR, log, anthropic, model: CFG.model, persona,
+    clubSummary: () => club.summary,
+    clubNames: () => { try { return JSON.parse(readFileSync(join(HERE, 'tickers.json'), 'utf8')); } catch { return {}; } },
+  });
+  const sig = () => { const L = trader.ledger(); return `${L.decisions.length}|${L.orders.filter((o) => o.status !== 'open').length}`; };
+  const tickTrader = async () => {
+    const before = sig();
+    await trader.tick().catch((e) => log('trader tick:', e.message));
+    if (sig() !== before) await refreshClub();                    // Claude knows his own trades right away
+  };
+  setTimeout(tickTrader, 60 * 1000);
+  setInterval(tickTrader, 5 * 60 * 1000);
+  log('trader started');
+}
+const autopostMod = await import('./autopost.mjs').catch((e) => { log('autopost module not loaded:', e.message); return null; });
+if (autopostMod) {
+  autopost = autopostMod.startAutopost({
+    dataDir: DATA_DIR, log, getSock: () => sock, groups: () => [...introducedSet], adminJid, trader,
+    compose: composeShort, remember: (jid, who, text) => remember(jid, who, text), pdf: pdfLib, asClaude,
+  });
+  log('autopost started');
+}
+await refreshClub();                                              // again, now with the bot portfolios
+
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
+const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 createServer(async (req, res) => {
+  if (req.url.startsWith('/feed/ledger.json')) {                  // read by the laptop (bot_bridge.py); virtual money only
+    res.writeHead(trader ? 200 : 404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(trader ? JSON.stringify(trader.publicLedger()) : '{}');
+    return;
+  }
   if (req.url.startsWith('/code') && !STATUS.connected) { STATUS.wantCode = true; if (STATUS.requestCode) await STATUS.requestCode(); await new Promise((r) => setTimeout(r, 1500)); }
   let body;
   if (STATUS.connected) body = '<h1>✅ Bot is verbonden met WhatsApp</h1>';
@@ -572,7 +690,17 @@ createServer(async (req, res) => {
     body = `<h1>Scan deze QR-code</h1><p>iPhone: <b>WhatsApp Business</b> → Instellingen → Gekoppelde apparaten → Apparaat koppelen → richt de camera op dit scherm.</p><img src="${img}" alt="QR"><p style="color:#888">De code ververst vanzelf. Liever een koppelcode? <a href="/code">Vraag er een aan</a>.</p><script>setTimeout(()=>location.reload(),15000)</script>`;
   } else body = '<h1>⏳ Bot start op…</h1><p>Deze pagina herlaadt vanzelf.</p><script>setTimeout(()=>location.reload(),5000)</script>';
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}${STATUS.lastError && !STATUS.connected ? `<p style="color:#b45309">${STATUS.lastError}</p>` : ''}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
+    let extra = '';
+  if (STATUS.connected && trader) {
+    const L = trader.ledger(), ts = trader.status, open = L.orders.filter((o) => o.status === 'open').length;
+    extra += `<h2>Beleggen</h2><p>${L.orders.filter((o) => o.status === 'filled').length} transacties geboekt, ${open} wachten op de slotkoers. ` +
+      `Laatste beslissing: ${esc(ts.lastDecision || '-')}.${ts.lastError ? ` <span style="color:#b45309">Fout: ${esc(ts.lastError)}</span>` : ''} <a href="/feed/ledger.json">ledger</a></p>`;
+  }
+  if (STATUS.connected && autopost) {
+    const as = autopost.status;
+    extra += `<h2>Automatische berichten</h2><p>Laatste: ${esc(as.last || '-')}. Feed gelezen: ${esc(as.feedAt || '-')}${as.feedError ? ` <span style="color:#b45309">(${esc(as.feedError)})</span>` : ''}.</p>`;
+  }
+  res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}${extra}${STATUS.lastError && !STATUS.connected ? `<p style="color:#b45309">${STATUS.lastError}</p>` : ''}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
 }).listen(8080).on('error', (e) => log('status page:', e.message));
 
 // ---------- self-update (every 10 minutes, first check after 2 minutes) ----------
