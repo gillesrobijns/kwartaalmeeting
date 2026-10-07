@@ -701,7 +701,7 @@ async function groupName(jid) {
 }
 
 // "Claude", "@Claude" or the nickname "Jean-Claude" (also Jeanclaude / Jean Claude).
-const CLAUDE_NAME = /(^|[\s@-])claude\b|\bjean\b/i;                 // \"Jean\" alone also means Claude (Jean-Claude)
+const CLAUDE_NAME = /(^|[\s@-])claude\b|\bjean\b|\bjean\s*-?\s*claude\b/i;                 // \"Jean\" alone also means Claude (Jean-Claude)
 // ---------- bull & bear ----------
 // "debat ASML" / "bull bear ASML" / "Claude, debat bitcoin": Claude makes the bull case, the aap the bear case,
 // then a WhatsApp poll. Max 3 per day; counts as a Claude answer for the daily budget.
