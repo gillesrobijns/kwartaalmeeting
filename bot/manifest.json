@@ -1,5 +1,5 @@
 {
- "version": "20261007-0935",
+ "version": "20261007-0957",
  "files": [
   {
    "name": "bot.mjs",
@@ -19,7 +19,7 @@
   },
   {
    "name": "persona.md",
-   "sha256": "6496f861b9c4db07af29251170f072156a8c446c4201c9bcb89d6dcdc9b03f90"
+   "sha256": "d806f78b6bee99bb78df9e42c767ede178757cfea491a59428465243ba2e9181"
   },
   {
    "name": "package.json",
