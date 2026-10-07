@@ -66,7 +66,7 @@ function remember(jid, name, text) {
 // Every group message starts with the speaker, so everyone sees who answers.
 const CLAUDE_TAG = '🤖 Claude: ';
 const MONKEY_TAG = '🐒 Aap: ';
-const asClaude = (t) => CLAUDE_TAG + String(t).replace(/^\s*(🤖\s*)?\*?claude\*?\s*:\s*/i, '').trim();
+const asClaude = (t) => CLAUDE_TAG + String(t).replace(/^\s*(🤖\s*)?\*?(jean-?)?claude\*?\s*:\s*/i, '').trim();
 
 // ---------- the monkey ----------
 // The monkey talks in start-stop caveman Dutch: third person, no conjugation, no thinking.
@@ -249,14 +249,16 @@ async function groupName(jid) {
   catch { return ''; }
 }
 
+// "Claude", "@Claude" or the nickname "Jean-Claude" (also Jeanclaude / Jean Claude).
+const CLAUDE_NAME = /(^|[\s@-])claude\b|\bjean\s*-?\s*claude\b/i;
 function isForBot(text, ctx) {
   const mentioned = (ctx?.mentionedJid || []).some((j) => myIds.has(userPart(j)));
   const repliedToBot = ctx?.participant && myIds.has(userPart(ctx.participant));
-  const named = /(^|[\s@])claude\b/i.test(text);
+  const named = CLAUDE_NAME.test(text);
   return mentioned || repliedToBot || named;
 }
 // The monkey only answers when spoken TO ("aap, …", "@aap", "🐒 …", "… aap?"), not when merely mentioned.
-const isForMonkey = (text) => /^\s*(@?(de\s+)?aap(je)?\b|🐒)|\baap(je)?\s*\?\s*$/i.test(text) && !/(^|[\s@])claude\b/i.test(text);
+const isForMonkey = (text) => /^\s*(@?(de\s+)?aap(je)?\b|🐒)|\baap(je)?\s*\?\s*$/i.test(text) && !CLAUDE_NAME.test(text);
 
 // Anti-spam: per-group sliding windows. Over the limit, Claude reacts ⏳ instead of answering; the monkey stays silent.
 const LIMITS = { claude: { n: 6, ms: 60 * 60 * 1000 }, monkey: { n: 1, ms: 30 * 60 * 1000 }, monkeyDay: { n: 4, ms: 24 * 60 * 60 * 1000 } };
