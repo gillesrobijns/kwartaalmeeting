@@ -1,13 +1,13 @@
 {
- "version": "20261007-1005",
+ "version": "20261007-1148",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "b3f1258ef8d42bad158f70c6db5d74f23eec9b0a32e440ec67de94f287f3487f"
+   "sha256": "e27d02a4f353d5d49df7330b35526800058c264d37035f05210705fbcd8f689e"
   },
   {
    "name": "clubdata.mjs",
-   "sha256": "5d347424c9b617d7910b572441ffc1315aea7a6af3ff5170b5f25b92aaf445f3"
+   "sha256": "00c0d4a8f2ee56faae341a7fe7ac70aad016d1f023fb9c81aa3fba577cf6b4ad"
   },
   {
    "name": "updater.mjs",
