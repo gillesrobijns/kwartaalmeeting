@@ -1,9 +1,9 @@
 {
- "version": "20261007-0747",
+ "version": "20261007-0829",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "2b67e244330d45254f7fd09c1c340b2e82358ce63d965271475bd69d9e31557f"
+   "sha256": "f79a9211ac8763945cd2eac1f8581f5e0510f746b440dbcd01e8d33a56eb60a8"
   },
   {
    "name": "clubdata.mjs",
@@ -11,7 +11,7 @@
   },
   {
    "name": "updater.mjs",
-   "sha256": "adf91b02d8ff21cc82b5cefd6d5da542797b702b7353afecef41e8f0ed09d8bd"
+   "sha256": "53cbea69a37d7bd410709cda71e03a74b795ece2f6ffc18006593cc2215abb00"
   },
   {
    "name": "pricewatch.mjs",
@@ -19,11 +19,11 @@
   },
   {
    "name": "persona.md",
-   "sha256": "8112d5ff9bb80e308e6d298ba5bb09b592348918dfbd1f34600877ebb020a930"
+   "sha256": "8c5bddf48d5d4416efd41d2832e3a6eac5b8df278d001ba6fb0af2cfa740f126"
   },
   {
    "name": "package.json",
-   "sha256": "9da41b97924e7efe16b34aa3817b106e0b1a9e964f25ad4f90bc63f866d7d232"
+   "sha256": "7b0c106d94e1149410b01312153bb4477a07275b2e0e9bd319be927c61f492b2"
   },
   {
    "name": "claude_strategie.md",
@@ -32,6 +32,22 @@
   {
    "name": "tickers.json",
    "sha256": "eff23736cd1bac535555417cfe3961116c9dc1cd9f15f415d3326ae34e6c1404"
+  },
+  {
+   "name": "trader.mjs",
+   "sha256": "85b6617eab179d345291658aa9b04f79a2280e3380948774f1a44bb1433d0d18"
+  },
+  {
+   "name": "autopost.mjs",
+   "sha256": "135bb3442db2b32eee026c3e8cf041eca187f8b6267255d566360c6d73300046"
+  },
+  {
+   "name": "pdf.mjs",
+   "sha256": "bbaacee31ad6923058d37beb9430e7861a182963c1ece92456b2ca47646f21a6"
+  },
+  {
+   "name": "universe.json",
+   "sha256": "77ce7488ae77b7e2c01af74d39b821aa9c4831f2cc2f648573a5f376ec7df750"
   }
  ]
 }
