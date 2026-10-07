@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
 import QRCode from 'qrcode';
-import { fetchClubSummary } from './clubdata.mjs';
+import { fetchClubSummary, fetchDashboardData } from './clubdata.mjs';
 import { checkForUpdate } from './updater.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -211,6 +211,106 @@ async function monkeyLine(jid, instruction) {
   return null;
 }
 
+// ---------- the aap's verdict after a quarterly meeting ----------
+// Only on Gilles' word. He sends the bot "/meeting" privately once the meeting is over. The bot reads the
+// PUBLIC dashboard (only quarters that are already revealed there, so nothing can leak early), sends Gilles
+// the aap's message as a preview, and posts it in the group only after Gilles answers "ja".
+// Then the aap learns one word per member who ended below him.
+const VERDICT_FILE = join(DATA_DIR, 'verdict.json');
+let verdict = existsSync(VERDICT_FILE) ? JSON.parse(readFileSync(VERDICT_FILE, 'utf8')) : { done: {}, armed: false, pending: null };
+const saveVerdict = () => writeFileSync(VERDICT_FILE, JSON.stringify(verdict, null, 1));
+const qLabel = (q) => String(q || '').replace('_', ' ');
+const nlPct = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1).replace('.', ',')}%`;
+
+async function verdictFacts() {
+  const d = await fetchDashboardData();
+  const meta = d.meta || {}, locked = meta.locked_quarter;
+  const open = (meta.available_quarters || []).filter((q) => q !== locked && d.quarters?.[q]?.bot_returns?.quarterly?.length && !verdict.done[q]);
+  const q = open[open.length - 1];
+  if (!q) return { waiting: locked || null };
+  const qd = d.quarters[q], br = qd.bot_returns.quarterly;
+  const ape = br.find((r) => r.member === 'Aap')?.return_pct ?? 0, cl = br.find((r) => r.member === 'Claude')?.return_pct ?? null;
+  const humans = (qd.quarterly_returns || []).filter((r) => Math.abs(r.return_pct || 0) > 1e-9 || (r.value_end || 0) > 0);  // like the slides: without inactive members
+  const victims = humans.filter((r) => r.return_pct < ape).sort((a, b) => b.return_pct - a.return_pct).map((r) => ({ name: r.member, ret: r.return_pct }));
+  const already = learned().length;
+  const words = victims.map((v, i) => ({ word: MONKEY_VOCAB[already + i], from: v.name })).filter((w) => w.word);
+  return { quarter: q, ape, claude: cl, total: humans.length, victims, words };
+}
+
+async function composeVerdict(f) {
+  const facts = [
+    `Het kwartaal ${qLabel(f.quarter)} is voorbij en net besproken op de kwartaalmeeting.`,
+    `Jouw rendement: ${nlPct(f.ape)}.`,
+    f.claude != null ? `Claude (de computer): ${nlPct(f.claude)}, dus ${f.claude < f.ape ? 'ONDER jou' : 'boven jou'}.` : '',
+    f.victims.length
+      ? `Deze ${f.victims.length} van de ${f.total} mensen eindigden onder jou en moeten een ad fundum drinken: ${f.victims.map((v) => `${v.name} (${nlPct(v.ret)})`).join(', ')}.`
+      : `Niemand van de ${f.total} mensen eindigde onder jou. Geen ad fundum.`,
+    f.words.length ? `Van elk van hen leer je één woord: ${f.words.map((w) => `'${w.word}' van ${w.from}`).join(', ')}.` : '',
+  ].filter(Boolean).join('\n');
+  try {
+    const res = await anthropic.messages.create({
+      model: CFG.model, max_tokens: 600, thinking: { type: 'between_tools' },
+      system: MONKEY_PERSONA.replace('{WORDS}', learned().map((w) => w.word).join(', ') || 'nog geen enkel woord').replace('{S}', '*NVIDIA*'),
+      messages: [{ role: 'user', content: `${facts}\n\nSchrijf nu je eindoordeel voor de hele groep. ${f.victims.length
+        ? 'Schep op, noem ELKE naam onder jou en zeg dat ze een ad fundum moeten drinken. Gebruik elk nieuw woord één keer, gerust een beetje verkeerd: je bent een aap.'
+        : 'Je bent teleurgesteld en eet je banaan alleen op. Geef toe dat de mensen dit keer slim waren, op zijn aaps.'} Hoogstens 8 korte stukjes, elk op een nieuwe regel. Geen andere cijfers dan deze. Schrijf alleen wat de aap zegt.` }],
+    });
+    const t = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim().replace(/^\s*(🐒\s*)?\*?aap\*?\s*:\s*/i, '');
+    if (t) return MONKEY_TAG + t;
+  } catch (e) { log('verdict AI failed:', e.message); }
+  return MONKEY_TAG + [
+    `Kwartaal voorbij. Aap ${nlPct(f.ape)}.`,
+    f.victims.length ? `${f.victims.map((v) => v.name).join(', ')}: onder aap. Ad fundum. 🍺` : 'Niemand onder aap. Aap eten banaan alleen. 🍌',
+    f.claude != null && f.claude < f.ape ? 'Computer ook onder aap. Hihi.' : '',
+    ...f.words.map((w) => `Aap nu kennen '${w.word}'. Dank ${w.from}.`),
+  ].filter(Boolean).join('\n');
+}
+
+async function verdictPreview(to) {
+  let f;
+  try { f = await verdictFacts(); }
+  catch (e) { await sock.sendMessage(to, { text: CLAUDE_TAG + `Het publieke dashboard is niet bereikbaar (${e.message}). Probeer het straks opnieuw met /meeting.` }); return; }
+  if (!f.quarter) {
+    verdict.armed = true; verdict.pending = null; saveVerdict();
+    await sock.sendMessage(to, { text: CLAUDE_TAG + `Het publieke dashboard toont ${f.waiting ? qLabel(f.waiting) : 'het kwartaal'} nog niet: dat gebeurt pas de dag na de meeting, bij de volgende update van het dashboard. Ik kijk elk half uur en stuur je het voorbeeld van de aap zodra het er staat. Zonder jouw "ja" gaat er niets naar de groep.` });
+    return;
+  }
+  const text = await composeVerdict(f);
+  verdict.pending = { quarter: f.quarter, text, victims: f.victims.map((v) => v.name), at: new Date().toISOString() };
+  verdict.armed = false; saveVerdict();
+  await sock.sendMessage(to, { text: `👀 *Voorbeeld: eindoordeel van de aap over ${qLabel(f.quarter)}* (de groep ziet dit nog niet)\n\n${text}\n\n` +
+    `Antwoord *ja* om het in de groep te zetten, *opnieuw* voor een andere versie of *nee* om te stoppen.` });
+  log(`verdict preview for ${f.quarter} sent to admin`);
+}
+
+async function verdictPost(to) {
+  const p = verdict.pending;
+  if (!p) return;
+  for (const g of introducedSet) { await sock.sendMessage(g, { text: p.text }); remember(g, 'De aap', p.text); }
+  const fresh = learnWords(p.victims, p.quarter);
+  verdict.done[p.quarter] = new Date().toISOString(); verdict.pending = null; saveVerdict();
+  await sock.sendMessage(to, { text: `✅ Gepost in de groep.${fresh.length ? ` De aap leerde: ${fresh.map((w) => w.word).join(', ')}.` : ''}` });
+  log(`verdict for ${p.quarter} posted`);
+}
+
+// Admin commands, private chat only. Returns true when the message was a command.
+async function adminCommand(from, text) {
+  if (from !== adminJid()) return false;
+  if (/^\/(meeting|aap)\b/.test(text)) { await verdictPreview(from); return true; }
+  if (verdict.pending && /^(ja|yes|ok|post)\b/.test(text)) { await verdictPost(from); return true; }
+  if (verdict.pending && /^opnieuw\b/.test(text)) { verdict.pending = null; await verdictPreview(from); return true; }
+  if ((verdict.pending || verdict.armed) && /^(nee|stop)\b/.test(text)) {
+    verdict.pending = null; verdict.armed = false; saveVerdict();
+    await sock.sendMessage(from, { text: CLAUDE_TAG + 'Gestopt. Er is niets gepost. Stuur /meeting als je het opnieuw wilt.' });
+    return true;
+  }
+  return false;
+}
+setInterval(async () => {                                          // after "/meeting" before the reveal: wait for the dashboard
+  if (!verdict.armed || verdict.pending || !sock || !adminJid()) return;
+  try { const f = await verdictFacts(); if (f.quarter) await verdictPreview(adminJid()); } catch (e) { log('verdict wait:', e.message); }
+}, 30 * 60 * 1000);
+
 // 🍌 reaction under messages that mention a loss (no text, max a few per day)
 const LOSS_RE = /(^|\s)[-−–]\s?\d+([.,]\d+)?\s?%|verlies|verloren|in het rood|rode cijfers|gezakt|zakt|gecrasht|gekelderd|kelder|afgestraft|😭|📉/i;
 const BANANA_MAX_PER_DAY = 2;
@@ -347,6 +447,7 @@ async function handlePrivate(msg) {
   const raw = textOf(msg).trim();
   const text = raw.toLowerCase();
   const from = msg.key.remoteJid;
+  if (await adminCommand(from, text)) return;
   if (text !== '/beheerder') { if (raw) await privateChat(msg, raw); return; }
   if (adminJid()) {
     await sock.sendMessage(from, { text: adminJid() === from ? '✅ Je bent al de beheerder.' : 'Er is al een beheerder.' });
