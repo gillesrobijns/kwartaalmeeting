@@ -116,3 +116,11 @@ export async function fetchClubSummary() {
   }
   return { summary: buildSummary(data), stocks: [...stocks], holders };
 }
+
+// The whole public dashboard data (what anyone can see on the site). Used for the aap's verdict
+// after a meeting: only quarters that are already revealed publicly are in here.
+export async function fetchDashboardData() {
+  const res = await fetch(`${PUBLIC_URL}?t=${Date.now()}`, { headers: { 'cache-control': 'no-cache' } });
+  if (!res.ok) throw new Error(`dashboard HTTP ${res.status}`);
+  return extractJson(await res.text());
+}
