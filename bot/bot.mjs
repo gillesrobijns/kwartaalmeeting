@@ -62,6 +62,12 @@ function remember(jid, name, text) {
   history.set(jid, h);
 }
 
+// ---------- who is talking ----------
+// Every group message starts with the speaker, so everyone sees who answers.
+const CLAUDE_TAG = '🤖 Claude: ';
+const MONKEY_TAG = '🐒 Aap: ';
+const asClaude = (t) => CLAUDE_TAG + String(t).replace(/^\s*(🤖\s*)?\*?claude\*?\s*:\s*/i, '').trim();
+
 // ---------- the monkey ----------
 // The monkey talks in start-stop caveman Dutch: third person, no conjugation, no thinking.
 const MONKEY_LINES = [            // a different way of "choosing" every time: unpredictable on purpose
@@ -99,7 +105,7 @@ function monkeyReply() {
   const pool = club.stocks.length ? club.stocks : ['NVIDIA', "D'IETEREN", 'ASML', 'HACKSAW'];
   const s = pool[Math.floor(Math.random() * pool.length)];
   const line = MONKEY_LINES[Math.floor(Math.random() * MONKEY_LINES.length)];
-  let out = `🐒 ${line.replace('{S}', `*${s}*`)}`;
+  let out = MONKEY_TAG + line.replace('{S}', `*${s}*`);
   const words = learned();
   if (words.length && Math.random() < 0.4) {             // show off a word he learned, and who taught it
     const w = words[Math.floor(Math.random() * words.length)];
@@ -172,7 +178,7 @@ async function handlePrivate(msg) {
   log(`admin set to ${from}`);
   const f = join(DATA_DIR, 'ideas-pending.json');
   const pending = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : [];
-  let reply = `✅ Dag ${msg.pushName || 'beheerder'}! Ideeën uit de groep komen voortaan bij jou terecht.`;
+  let reply = CLAUDE_TAG + `✅ Dag ${msg.pushName || 'beheerder'}! Ideeën uit de groep komen voortaan bij jou terecht.`;
   if (pending.length) reply += `\n\nAl bewaard:\n${pending.map((p) => `• ${p.van}: ${p.idee}`).join('\n')}`;
   await sock.sendMessage(from, { text: reply });
   writeFileSync(f, '[]');
@@ -346,10 +352,9 @@ const INTRO_NOTE =
   'Gebruik echte namen en exacte cijfers uit de clubdata, en tel zelf correct. Trek er een conclusie uit in één zin, alsof je een diagnose stelt. Droog en zelfzeker, niet gemeen: plagen mag, beledigen niet. ' +
   'POSITIE: zeg dan wat jij daarom anders gaat doen. Vanaf Q4 2026 beleg je mee met €50.000 virtueel geld: gespreid, kwaliteit, bewust andere aandelen dan de club, hoogstens twee transacties per week, elke maandag een beslissing, en elke aankoop meld je hier met de reden erbij. Eindig die alinea met een korte, uitdagende zin richting de groep. ' +
   'GEBRUIK: één zin: tag @Claude voor cijfers, nieuws of een mening; ideeën voor het dashboard gaan naar Gilles; eurobedragen en het lopende kwartaal krijgen ze niet. ' +
-  'Hoogstens drie korte alinea\'s en 120 woorden, geen opsomming, geen vette tekst. Stel de aap niet voor: die doet dat zelf meteen na jou; je mag hem in je laatste zin het woord geven.\n\n';
+  'Hoogstens drie korte alinea\'s en 120 woorden, geen opsomming, geen vette tekst. Stel de aap niet voor: die doet dat zelf meteen na jou; je mag de beleggende aap in je laatste zin het woord geven.\n\n';
 const MONKEY_INTRO = [
-  '🐒 Oe. Aap hier.',
-  'Computer veel praten. Aap niet praten.',
+  MONKEY_TAG + 'Computer veel praten. Aap niet praten.',
   'Computer denken. Aap banaan pakken. Of krant slaan. Of zitten op laptop.',
   'Aap ook vijftigduizend. Aap niet weten wat dat is.',
   'Januari: aap boven computer. 🍌',
@@ -365,7 +370,7 @@ async function introduce(jid, name, text, msg) {
   try { intro = await askClaude(jid, name, text, INTRO_NOTE); } catch (e) { log('intro error:', e.message); }
   await sock.sendPresenceUpdate('paused', jid).catch(() => {});
   if (intro) {
-    await sock.sendMessage(jid, { text: `🤖 ${intro}` });
+    await sock.sendMessage(jid, { text: asClaude(intro) });
     countReply();
     remember(jid, 'Claude', intro);
   }
@@ -409,7 +414,7 @@ async function handle(msg) {
   if (repliesToday() >= CFG.dailyLimit) {
     if (repliesToday() === CFG.dailyLimit) {
       countReply();
-      await sock.sendMessage(jid, { text: '🤖 Ik heb vandaag genoeg gepraat, mijn budget is op. Morgen ben ik er weer! 🍺' });
+      await sock.sendMessage(jid, { text: CLAUDE_TAG + 'Ik heb vandaag genoeg gepraat, mijn budget is op. Morgen ben ik er weer! 🍺' });
     }
     return;
   }
@@ -425,7 +430,7 @@ async function handle(msg) {
   }
   await sock.sendPresenceUpdate('paused', jid).catch(() => {});
   if (!answer) return;
-  const reply = `🤖 ${answer}`;
+  const reply = asClaude(answer);
   await sock.sendMessage(jid, { text: reply }, { quoted: msg });
   countReply();
   remember(jid, 'Claude', answer);
@@ -468,7 +473,7 @@ if (pw) {
     announce: async (hits) => {
       const groups = [...introducedSet];
       if (!groups.length || !sock) return;
-      const text = await composeBreaking(hits);
+      const text = asClaude(await composeBreaking(hits));
       for (const g of groups) { await sock.sendMessage(g, { text }); remember(g, 'Claude', text); }
     },
   });
