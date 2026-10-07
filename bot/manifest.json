@@ -1,9 +1,9 @@
 {
- "version": "20261007-0907",
+ "version": "20261007-0933",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "5bd283d981bb1984a4fefcdadeafdf59f8785f72bf24cda6aaddfd471f1f40a2"
+   "sha256": "d3ac187d78c15875ae5e83e782196c318be3110e8053a6fcb88af8c7a13e29ab"
   },
   {
    "name": "clubdata.mjs",
@@ -19,7 +19,7 @@
   },
   {
    "name": "persona.md",
-   "sha256": "8c5bddf48d5d4416efd41d2832e3a6eac5b8df278d001ba6fb0af2cfa740f126"
+   "sha256": "6496f861b9c4db07af29251170f072156a8c446c4201c9bcb89d6dcdc9b03f90"
   },
   {
    "name": "package.json",
