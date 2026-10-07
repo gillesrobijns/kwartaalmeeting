@@ -1087,11 +1087,13 @@ body.privacy-on .eur:hover { filter: none; }
   .rm-col-body { padding: .7rem; }
 }
 
-/* BOTS-V1: Claude (lid 11) en de aap (lid 12) */
-.bot-row td{background:rgba(27,42,74,.035);font-style:italic;color:var(--text-muted)}
+/* BOTS-V1 + BOTS-V2: Claude (lid 11) en de aap (lid 12) */
+.data-table tr.bot-row td,.heatmap-table tr.bot-row td:first-child{background:#f6f7f9;font-style:italic;color:var(--text-muted)}
+[data-theme="dark"] .data-table tr.bot-row td,[data-theme="dark"] .heatmap-table tr.bot-row td:first-child{background:#20243a}
 .bot-row td.name,.bot-row td.bot-link{cursor:pointer}
-.ape-line td{padding:3px 10px!important;font-size:.62rem;letter-spacing:.08em;color:#b45309;font-weight:700;background:#fffbeb;text-transform:uppercase;font-style:normal}
-[data-theme="dark"] .ape-line td{background:rgba(180,83,9,.16);color:#f59e0b}
+/* BOTS-V2: members below the aap get a soft amber row (they owe an ad fundum) */
+.data-table tr.below-ape td{background:#fdf3e2}
+[data-theme="dark"] .data-table tr.below-ape td{background:#33291c}
 .bot-av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0;font-style:normal}
 .bot-tag{font-size:.56rem;letter-spacing:.06em;color:#94a3b8;border:1px solid rgba(148,163,184,.45);border-radius:4px;padding:0 4px;margin-left:auto}
 .bots-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.75rem}
@@ -1110,11 +1112,14 @@ body.privacy-on .eur:hover { filter: none; }
 .bots-wbar{height:7px;background:var(--border);border-radius:4px;overflow:hidden;min-width:3.5rem}
 .bots-wbar i{display:block;height:100%;background:var(--navy-light)}
 [data-theme="dark"] .bots-wbar i{background:#8892A4}
-.bots-move{border-left:3px solid var(--green);padding:.45rem .7rem;margin:.45rem 0;background:var(--table-hover);border-radius:0 6px 6px 0;font-size:.8rem;line-height:1.45}
-.bots-move.sell{border-color:var(--red)}
-.bots-move.ape{border-color:#b45309}
-.bots-move .c{color:var(--text-muted)}
-.bots-pending{font-size:.8rem;color:var(--text-muted);background:var(--table-hover);border-radius:8px;padding:.6rem .75rem;line-height:1.5}
+.bots-list{list-style:none;margin:0;padding:0}
+.bots-list li{display:grid;grid-template-columns:3.4rem 1fr;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border);font-size:.82rem;line-height:1.45}
+.bots-list li:last-child{border-bottom:none}
+.bots-list .d{color:var(--text-muted);font-size:.72rem;padding-top:.12rem}
+.bots-list .c,.bots-note .c{color:var(--text-muted)}
+.bots-note{font-size:.82rem;line-height:1.5;margin:.45rem 0 0}
+.bots-quote{font-style:italic}
+@media(max-width:480px){.bots-tbl .wb{display:none}.bots-kpis{gap:1.25rem}}
 
 /* public build: mystery pill + surprise overlay + landing page */
 #meeting-landing {
@@ -2681,7 +2686,7 @@ function renderOverviewRanking(ret, sp) {
     if (r.bot) {
       html += '<tr class="bot-row"><td style="text-align:center">–</td>' +
         '<td class="name" onclick="showPage(\'bots\')">' + BOT_META[r.member].emoji + ' ' + BOT_META[r.member].label + '</td>' +
-        '<td class="right mono">'+pct(r.return_pct)+'</td>'+barCell+'</tr>' + _apeLine(rows, i, 4);
+        '<td class="right mono">'+pct(r.return_pct)+'</td>'+barCell+'</tr>';
       return;
     }
     rk++;
@@ -2692,7 +2697,7 @@ function renderOverviewRanking(ret, sp) {
     const rankCell = rk<=3 || isLast
       ? '<td style="text-align:center;font-size:1rem">'+medal+'</td>'
       : '<td class="'+rc+'" style="text-align:center;font-weight:700;color:var(--text-muted)">'+rk+'</td>';
-    html += '<tr class="'+cls+'">'+rankCell+
+    html += '<tr class="'+cls+_apeAttr(rows, i)+'">'+rankCell+
       '<td class="name" onclick="navigateToMember(\''+r.member+'\')">'+r.member+'</td>'+
       '<td class="right mono '+pctClass(r.return_pct)+'">'+pct(r.return_pct)+'</td>'+barCell+'</tr>';
   });
@@ -2809,9 +2814,9 @@ function renderYTDTable(ret) {
   const maxV = Math.max(...rows.map(r => Math.abs(r.return_pct || 0)), 0.001);
   let rk = 0;
   tb.innerHTML = rows.map((r,i) => {
-    if (r.bot) return _botTableRow(r, 2, maxV) + _apeLine(rows, i, 5);
+    if (r.bot) return _botTableRow(r, 2, maxV);
     rk++;
-    return '<tr>' +
+    return '<tr class="'+_apeAttr(rows, i)+'">' +
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+rk+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
@@ -2831,9 +2836,9 @@ function renderQuarterlyDetail(ret) {
   const maxV = Math.max(...rows.map(r => Math.abs(r.return_pct || 0)), 0.001);
   let rk = 0;
   tb.innerHTML = rows.map((r,i) => {
-    if (r.bot) return _botTableRow(r, 3, maxV) + _apeLine(rows, i, 6);
+    if (r.bot) return _botTableRow(r, 3, maxV);
     rk++;
-    return '<tr>' +
+    return '<tr class="'+_apeAttr(rows, i)+'">' +
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+rk+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
@@ -2862,11 +2867,11 @@ function _withBots(ret, kind) {
   if (!b.length) return ret.slice();
   return ret.concat(b).sort((x, y) => (y.return_pct || 0) - (x.return_pct || 0));
 }
-function _apeLine(rows, i, cols) {               // under the aap: everyone below drinks an ad fundum
-  const r = rows[i];
-  if (!r.bot || r.member !== 'Aap' || !rows.slice(i + 1).some(x => !x.bot)) return '';
-  return '<tr class="ape-line"><td colspan="' + cols + '">Onder de aap: ad fundum &#127866;</td></tr>';
+function _belowApe(rows, i) {                   // BOTS-V2: members below the aap owe an ad fundum
+  const a = rows.findIndex(x => x.bot && x.member === 'Aap');
+  return a >= 0 && i > a && !rows[i].bot;
 }
+function _apeAttr(rows, i) { return _belowApe(rows, i) ? ' below-ape" title="Onder de aap: ad fundum' : ''; }
 function _botTableRow(r, dashCols, maxV) {
   const m = BOT_META[r.member];
   return '<tr class="bot-row"><td style="text-align:center;width:28px">–</td>' +
@@ -2881,7 +2886,7 @@ function renderBots() {
   const el = document.getElementById('bots-grid');
   if (!el) return;
   const B = DATA && DATA.bots;
-  if (!B || !B.members) { el.innerHTML = '<div class="bots-pending">Nog geen gegevens van Claude en de aap.</div>'; return; }
+  if (!B || !B.members) { el.innerHTML = '<div class="bots-note">Nog geen gegevens van Claude en de aap.</div>'; return; }
   const badge = document.getElementById('bots-badge');
   if (badge) badge.textContent = '€50.000 virtueel elk · sinds ' + new Date(B.start_date + 'T12:00:00').toLocaleDateString('nl-BE', { day: 'numeric', month: 'short', year: 'numeric' });
   el.innerHTML = B.members.map(m => {
@@ -2890,26 +2895,27 @@ function renderBots() {
       '<div><div class="bots-name">' + m.name + '</div><div class="bots-sub">' + _botEsc(m.tagline) + '</div></div></div>';
     h += '<div class="bots-kpis"><div class="bots-kpi"><div class="v ' + pctClass(m.return_since_start || 0) + '">' + _botPct(m.return_since_start) + '</div><div class="l">sinds de start</div></div>' +
       '<div class="bots-kpi"><div class="v" style="color:var(--text-muted)">' + _botPct(B.sp500_since_start) + '</div><div class="l">S&amp;P 500, zelfde periode</div></div></div>';
-    const hold = m.holdings || [];
+    const hold = m.holdings || [], pend = m.pending || [];
+    const day = pend.length ? _botDate(pend[0].date) : '';
     if (hold.length) {
-      h += '<div class="bots-lbl">' + (m.key === 'Aap' ? 'Portefeuille (gelijke gewichten)' : 'Portefeuille') + '</div><table class="bots-tbl">' +
+      h += '<div class="bots-lbl">' + (m.key === 'Aap' ? 'Portefeuille, gelijke gewichten' : 'Portefeuille') + '</div><table class="bots-tbl">' +
         hold.map(x => '<tr><td>' + _botEsc(x.stock) + '</td>' +
-          (m.key === 'Aap' ? '' : '<td style="width:28%"><div class="bots-wbar"><i style="width:' + Math.min(100, x.weight / 0.15 * 100).toFixed(0) + '%"></i></div></td><td class="r">' + Math.round(x.weight * 100) + '%</td>') +
+          (m.key === 'Aap' ? '' : '<td class="wb" style="width:28%"><div class="bots-wbar"><i style="width:' + Math.min(100, x.weight / 0.15 * 100).toFixed(0) + '%"></i></div></td><td class="r">' + Math.round(x.weight * 100) + '%</td>') +
           '<td class="r ' + pctClass(x.return_pct || 0) + '" style="font-weight:700">' + _botPct(x.return_pct) + '</td></tr>').join('') + '</table>';
-    }
-    if ((m.pending || []).length) {
-      h += '<div class="bots-lbl">Nog te boeken</div><div class="bots-pending">Tegen de slotkoers van ' + _botDate(m.pending[0].date) + ': ' +
-        m.pending.map(p => (p.action === 'Sell' ? 'verkoop ' : '') + _botEsc(p.stock)).join(', ') + '.</div>';
+      if (pend.length) h += '<p class="bots-note"><span class="c">Nog te boeken tegen de slotkoers van ' + day + ':</span> ' +
+        pend.map(p => (p.action === 'Sell' ? 'verkoop ' : 'koop ') + _botEsc(p.stock)).join(', ') + '</p>';
+    } else if (pend.length) {
+      h += '<div class="bots-lbl">Portefeuille, geboekt tegen de slotkoers van ' + day + '</div><table class="bots-tbl">' +
+        pend.filter(p => p.action !== 'Sell').map(p => '<tr><td>' + _botEsc(p.stock) + '</td></tr>').join('') + '</table>';
     }
     if (m.key === 'Claude' && (m.moves || []).length) {
-      h += '<div class="bots-lbl">Laatste zetten</div>' + m.moves.slice(0, 4).map(x =>
-        '<div class="bots-move' + (x.action === 'Sell' ? ' sell' : '') + '"><b>' + (x.action === 'Sell' ? 'Verkoop ' : 'Koop ') + _botEsc(x.stock) + '</b> · ' + _botDate(x.date) +
-        (x.reason ? '<br>' + _botEsc(x.reason) : '') +
-        (x.sell_condition ? '<br><span class="c">Verkoopt als ' + _botEsc(x.sell_condition.replace(/^verkopen\s+als\s+/i, '')) + '</span>' : '') + '</div>').join('');
+      h += '<div class="bots-lbl">Laatste zetten</div><ul class="bots-list">' + m.moves.slice(0, 3).map(x =>
+        '<li><span class="d">' + _botDate(x.date) + '</span><span><b>' + (x.action === 'Sell' ? 'Verkoop ' : 'Koop ') + _botEsc(x.stock) + '.</b> ' + _botEsc(x.reason) +
+        (x.sell_condition ? '<br><span class="c">Verkoopt als ' + _botEsc(x.sell_condition.replace(/^verkopen\s+als\s+/i, '')) + '</span>' : '') + '</span></li>').join('') + '</ul>';
     }
     if (m.key === 'Aap') {
-      h += '<div class="bots-lbl">Hoe gekozen</div><div class="bots-move ape">' + (m.how ? '“' + _botEsc(m.how) + '”<br>' : '') +
-        '<span class="c">Volgende keuze: ' + new Date(m.next_pick + 'T12:00:00').toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' }) + '.</span></div>';
+      h += '<div class="bots-lbl">Hoe gekozen</div>' + (m.how ? '<p class="bots-note bots-quote">“' + _botEsc(m.how) + '”</p>' : '') +
+        '<p class="bots-note"><span class="c">Volgende keuze: ' + new Date(m.next_pick + 'T12:00:00').toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long' }) + '.</span></p>';
     }
     return h + '</div>';
   }).join('');
