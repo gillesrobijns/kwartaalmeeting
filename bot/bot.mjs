@@ -5,7 +5,7 @@
 
 import makeWASocket, {
   useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion,
-  jidDecode, isJidGroup, normalizeMessageContent,
+  jidDecode, isJidGroup, normalizeMessageContent, downloadContentFromMessage,
 } from 'baileys';
 import Anthropic from '@anthropic-ai/sdk';
 import pino from 'pino';
@@ -573,7 +573,7 @@ async function handlePrivate(msg) {
   const text = raw.toLowerCase();
   const from = msg.key.remoteJid;
   if (await adminCommand(from, text)) return;
-  if (text !== '/beheerder') { if (raw) await privateChat(msg, raw); return; }
+  if (text !== '/beheerder') { if (raw || hasImage(msg)) await privateChat(msg, raw); return; }
   if (adminJid()) {
     await sock.sendMessage(from, { text: adminJid() === from ? '✅ Je bent al de beheerder.' : 'Er is al een beheerder.' });
     return;
@@ -594,7 +594,7 @@ async function privateChat(msg, text) {
   const name = msg.pushName || 'iemand';
   if (Date.now() - (cooldown.get(from) || 0) < 5000) return;      // double-tap protection
   cooldown.set(from, Date.now());
-  remember(from, name, text);
+  remember(from, name, hasImage(msg) ? `[foto]${text ? ` ${text}` : ''}` : text);
 
   if (isForMonkey(text)) {                                          // "aap, ..." works privately too
     const reply = await monkeyAnswer(from, name, text);
@@ -612,7 +612,7 @@ async function privateChat(msg, text) {
   }
   await sock.sendPresenceUpdate('composing', from).catch(() => {});
   let answer;
-  try { answer = await askClaude(from, name, text, '', true); }
+  try { answer = await askClaude(from, name, text || '(stuurt een foto zonder tekst)', '', true, await imagesOf(msg, contextOf(msg))); }
   catch (e) {
     log('claude DM error:', e.status || '', e.message);
     answer = 'Even een kortsluiting in mijn hoofd. Probeer het zo nog eens.';
@@ -625,17 +625,22 @@ async function privateChat(msg, text) {
   log(`DM answered for ${name}`);
 }
 
-async function askClaude(jid, asker, question, extra = '', priv = false) {
+async function askClaude(jid, asker, question, extra = '', priv = false, images = []) {
   const h = history.get(jid) || [];
   const transcript = h.map((m) => `${m.name}: ${m.text}`).join('\n');
-  const messages = [{
-    role: 'user',
-    content: `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
+  const imgNote = images.length ? `Bij dit bericht stuurde ${asker} een afbeelding mee (screenshot of foto): kijk ernaar en reageer erop.\n\n` : '';
+  const prompt =
+             `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
              (priv
                ? `Dit is een PRIVÉGESPREK met ${asker}, niet de groep. Eerdere berichten in dit gesprek (oudste eerst):\n${transcript || '(geen)'}\n\n` +
                  `${asker} schrijft je nu: "${question}"\n\n${extra}${PRIVATE_NOTE}Schrijf alleen je antwoord aan ${asker}.`
                : `Recente berichten in de groep (oudste eerst):\n${transcript || '(geen)'}\n\n` +
-                 `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`),
+                 `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`);
+  const messages = [{
+    role: 'user',
+    content: images.length
+      ? [...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } })), { type: 'text', text: imgNote + prompt }]
+      : prompt,
   }];
   let text = '';
   for (let round = 0; round < 4; round++) {
@@ -697,6 +702,68 @@ async function groupName(jid) {
 
 // "Claude", "@Claude" or the nickname "Jean-Claude" (also Jeanclaude / Jean Claude).
 const CLAUDE_NAME = /(^|[\s@-])claude\b|\bjean\s*-?\s*claude\b/i;
+// ---------- bull & bear ----------
+// "debat ASML" / "bull bear ASML" / "Claude, debat bitcoin": Claude makes the bull case, the aap the bear case,
+// then a WhatsApp poll. Max 3 per day; counts as a Claude answer for the daily budget.
+const DEBATE_RE = /^(?:debat|bull\s*(?:&|en|vs\.?|tegen|\/)?\s*bear)\s*[:,-]?\s+(.{2,40})$/i;
+const debateDay = { day: '', n: 0 };
+async function maybeDebate(jid, msg, name, text) {
+  const clean = text.replace(/^(\s*@\d+)+/, '').replace(/^\s*(jean[\s-]*)?claude\s*[,:]?\s*/i, '').trim();
+  const m = clean.match(DEBATE_RE);
+  if (!m) return false;
+  const subject = m[1].replace(/[?!.]+$/, '').replace(/^over\s+/i, '').trim();
+  if (debateDay.day !== today()) { debateDay.day = today(); debateDay.n = 0; }
+  if (debateDay.n >= 3 || repliesToday() >= dailyLimit()) {
+    await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+    return true;
+  }
+  debateDay.n++;
+  log(`debate: ${subject} (asked by ${name})`);
+  await sock.sendPresenceUpdate('composing', jid).catch(() => {});
+  let bull = '';
+  try {
+    bull = await askClaude(jid, name, text,
+      `Dit is een bull & bear-debat over ${subject}. Jij verdedigt de bull case: waarom kopen. De aap doet meteen daarna de bear case. ` +
+      'Begin met 🐂. Twee à drie zinnen: je sterkste argument met één concreet inzicht (zoek op het web als je het nodig hebt), en eindig met een steek naar de aap of naar een clublid dat het aandeel heeft. ');
+  } catch (e) { log('debate bull failed:', e.message); }
+  if (!bull) bull = `🐂 ${subject}? Kopen. Meer heb ik vandaag niet, maar de aap heeft nog minder.`;
+  if (!bull.startsWith('🐂')) bull = `🐂 ${bull}`;
+  await sock.sendMessage(jid, { text: asClaude(bull) }, { quoted: msg });
+  countReply();
+  remember(jid, 'Claude', bull);
+  await new Promise((r) => setTimeout(r, 4000));
+  let bear = await monkeyLine(jid, `Bull & bear-debat over ${subject}. Claude verdedigde net de bull case (zie zijn laatste bericht). ` +
+    `Jij bent de bear: waarom ${subject} NIET kopen, op jouw manier, en lach Claude's argument uit. Begin met 🐻. Hoogstens 4 stukjes.`);
+  if (!bear) bear = MONKEY_TAG + `🐻 Aap zeggen nee. Aap niet vertrouwen ${subject}. Aap houden banaan.`;
+  bear = bear.replace(/^(🐒 Aap: )(?!🐻)/, '$1🐻 ');
+  await sock.sendMessage(jid, { text: bear });
+  remember(jid, 'De aap', bear);
+  await new Promise((r) => setTimeout(r, 2000));
+  await sock.sendMessage(jid, { poll: { name: `${subject}: wie heeft gelijk?`, values: ['🐂 Claude: kopen', '🐻 Aap: niet kopen'], selectableCount: 1 } })
+    .catch((e) => log('poll failed:', e.message));
+  remember(jid, '(bot)', `Poll: ${subject}: wie heeft gelijk? Claude (kopen) of de aap (niet kopen)`);
+  return true;
+}
+
+// ---------- screenshots ----------
+const IMG_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const hasImage = (msg) => !!normalizeMessageContent(msg.message)?.imageMessage;
+// The image in this message, or the image it replies to ("Claude, wat denk je hiervan?" under a screenshot).
+async function imagesOf(msg, ctx) {
+  const img = normalizeMessageContent(msg.message)?.imageMessage
+    || (ctx?.quotedMessage ? normalizeMessageContent(ctx.quotedMessage)?.imageMessage : null);
+  if (!img) return [];
+  const type = String(img.mimetype || 'image/jpeg').split(';')[0];
+  if (!IMG_TYPES.has(type) || Number(img.fileLength || 0) > 5 * 1024 * 1024) return [];
+  try {
+    const chunks = [];
+    for await (const c of await downloadContentFromMessage(img, 'image')) chunks.push(c);
+    const buf = Buffer.concat(chunks);
+    if (!buf.length || buf.length > 5 * 1024 * 1024) return [];
+    return [{ media_type: type, data: buf.toString('base64') }];
+  } catch (e) { log('image download failed:', e.message); return []; }
+}
+
 function isForBot(text, ctx) {
   const mentioned = (ctx?.mentionedJid || []).some((j) => myIds.has(userPart(j)));
   const repliedToBot = ctx?.participant && myIds.has(userPart(ctx.participant));
@@ -834,13 +901,15 @@ async function handle(msg) {
   if (!jid || msg.key.fromMe) return;
   if (!isJidGroup(jid)) { if (jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid')) await handlePrivate(msg); return; }
   const text = textOf(msg).trim();
-  if (!text) return;
+  const photo = hasImage(msg);
+  if (!text && !photo) return;
   if (CFG.groupFilter && !(await groupName(jid)).toLowerCase().includes(CFG.groupFilter)) return;
 
   const name = msg.pushName || userPart(msg.key.participantAlt || msg.key.participant) || 'iemand';
   const ctx = contextOf(msg);
   const forBot = isForBot(text, ctx);
-  remember(jid, name, text);
+  remember(jid, name, photo ? `[foto]${text ? ` ${text}` : ''}` : text);
+  if (introduced(jid) && await maybeDebate(jid, msg, name, text)) return;
   await maybeBanana(jid, msg, text);
   if (introduced(jid) && !forBot && !isForMonkey(text) && LOSS_RE.test(text)) maybeMonkeyButtIn(jid, 0.25, MONKEY_LOSS, name.split(' ')[0]);
 
@@ -874,7 +943,7 @@ async function handle(msg) {
 
   await sock.sendPresenceUpdate('composing', jid).catch(() => {});
   let answer;
-  try { answer = await askClaude(jid, name, text); }
+  try { answer = await askClaude(jid, name, text || '(stuurt een foto zonder tekst)', '', false, await imagesOf(msg, ctx)); }
   catch (e) {
     log('claude error:', e.status || '', e.message);
     answer = e.status === 400 && /credit/i.test(e.message)
