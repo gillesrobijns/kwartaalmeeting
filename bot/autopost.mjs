@@ -3,11 +3,13 @@
 //   1. Claude's and the aap's own transactions (Claude first, the aap 20 seconds later)
 //   2. De Kwartaalkrant after the meeting: short text + the krant as pdf
 //   3. Duvel reminders between the end of a quarter and the meeting
+//   4. Aankoop-verjaardag: a position a member still holds turns 1, 2, 3... years old (from 12:00, max 2 per week)
 // The laptop publishes the facts in bot/feed.json (duvel status, krant); previews go to Gilles only.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { bxDate, bxMinutes, weekday } from './trader.mjs';
+import { fetchDashboardData } from './clubdata.mjs';
 
 const FEED_URL = process.env.FEED_URL || 'https://gillesrobijns.github.io/kwartaalmeeting/bot/feed.json';
 const addDays = (ds, n) => { const d = new Date(`${ds}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -104,6 +106,65 @@ export function startAutopost({ dataDir, log, getSock, groups, adminJid, trader,
     return `duvel ${kind}`;
   }
 
+  // ---- 4. aankoop-verjaardag ----
+  // First purchase date per member+stock from the public dashboard (closed quarters only, no euro amounts).
+  // Only positions still held and never sold since that first purchase; return = the position's return at the
+  // end of the last closed quarter, so nothing from the running (secret) quarter leaks.
+  let dash = null, dashAt = 0;
+  async function anniversaries(today) {
+    if (!dash || Date.now() - dashAt > 6 * 60 * 60 * 1000) { dash = await fetchDashboardData(); dashAt = Date.now(); }
+    const meta = dash.meta || {};
+    const qs = (meta.available_quarters || []).filter((q) => q !== meta.locked_quarter);
+    const first = {}, sold = {};
+    for (const q of qs) {
+      for (const b of dash.quarters[q]?.bought_positions || []) { const k = `${b.member}|${b.stock}`, dt = String(b.date).slice(0, 10); if (!first[k] || dt < first[k]) first[k] = dt; }
+      for (const t of dash.quarters[q]?.sold_positions || []) (sold[`${t.member}|${t.stock}`] ||= []).push(String(t.date).slice(0, 10));
+    }
+    const L = dash.quarters[meta.latest_quarter] || {};
+    const held = (L.holdings || []).filter((h) => (h.current_value_eur || 0) > 0);
+    const tot = {};
+    for (const h of held) tot[h.member] = (tot[h.member] || 0) + h.current_value_eur;
+    const out = [];
+    for (const h of held) {
+      const k = `${h.member}|${h.stock}`, f = first[k];
+      if (!f || (sold[k] || []).some((x) => x >= f) || h.return_pct == null) continue;
+      for (let y = 1; y <= 10; y++) {
+        const ann = `${Number(f.slice(0, 4)) + y}${f.slice(4)}`;
+        const late = (new Date(`${today}T12:00:00Z`) - new Date(`${ann}T12:00:00Z`)) / 864e5;
+        if (late < 0 || late > 6) continue;
+        const id = `anniv:${k}:${y}`;
+        if (!state.done[id]) out.push({ id, member: h.member, stock: h.stock, years: y, first: f, late, ret: h.return_pct,
+          weight: Math.round(100 * h.current_value_eur / (tot[h.member] || 1)), asOf: String(L.end_date || '').slice(0, 10) });
+      }
+    }
+    return out.sort((a, b) => Math.abs(b.ret) - Math.abs(a.ret));
+  }
+  async function postAnniversary(today, m) {
+    if (m < 12 * 60) return false;
+    const week = addDays(today, -((weekday(today) + 6) % 7));       // monday of this week
+    if (state.annivWeek !== week) { state.annivWeek = week; state.annivN = 0; }
+    if (state.annivN >= 2) return false;
+    let list;
+    try { list = await anniversaries(today); } catch (e) { log('anniversary data failed:', e.message); return false; }
+    const a = list[0];
+    if (!a) return false;
+    const pct = `${a.ret >= 0 ? '+' : ''}${(a.ret * 100).toFixed(1).replace('.', ',')}%`;
+    const when = a.late < 1 ? 'Vandaag is het' : 'Deze week was het';
+    const facts = `${when} precies ${a.years} jaar geleden (${longDate(a.first)}) dat ${a.member} voor het eerst ${a.stock} kocht, en hij heeft het nog altijd. ` +
+      `Rendement op die positie: ${pct} (stand op ${longDate(a.asOf)}, het einde van het laatst afgesloten kwartaal). Gewicht in zijn portefeuille: ${a.weight}%.`;
+    let text = null;
+    try {
+      text = await compose(`Aankoop-verjaardag. ${facts}\n\nSchrijf één kort bericht voor de groep: begin met 🎂, en feliciteer of roast ${a.member} met dat cijfer, volgens je regels voor humor. ` +
+        'Hoogstens 2 zinnen. Geen eurobedragen. Schrijf alleen het bericht.');
+    } catch (e) { log('anniversary compose failed:', e.message); }
+    if (!text) text = `🎂 ${a.years} jaar geleden kocht ${a.member} ${a.stock}. Sindsdien: ${pct}.`;
+    if (!text.startsWith('🎂')) text = `🎂 ${text}`;
+    await toGroups((g) => send(g, asClaude(text)));
+    state.done[a.id] = new Date().toISOString();
+    state.annivN++;
+    return `verjaardag ${a.member} ${a.stock}`;
+  }
+
   // ---- previews for Gilles (no daily limit, private) ----
   async function previews() {
     const admin = adminJid();
@@ -132,7 +193,7 @@ export function startAutopost({ dataDir, log, getSock, groups, adminJid, trader,
       await loadFeed();
       if (m >= 8 * 60 && m < 22 * 60) await previews();
       if (state.used || m < 9 * 60 || m >= 21 * 60) return;
-      for (const job of [() => postTrades(), () => postKrant(today, m), () => postDuvel(today, m)]) {
+      for (const job of [() => postTrades(), () => postKrant(today, m), () => postDuvel(today, m), () => postAnniversary(today, m)]) {
         const what = await job();
         if (what) { state.used = true; status.last = `${today} ${what}`; log(`autopost: ${what}`); break; }
       }
@@ -142,5 +203,5 @@ export function startAutopost({ dataDir, log, getSock, groups, adminJid, trader,
 
   setTimeout(tick, 45 * 1000);
   setInterval(tick, 2 * 60 * 1000);
-  return { status, tick, state };
+  return { status, tick, state, anniversaries };
 }
