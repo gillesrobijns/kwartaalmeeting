@@ -64,17 +64,18 @@ function remember(jid, name, text) {
 
 // ---------- the monkey ----------
 // The monkey talks in start-stop caveman Dutch: third person, no conjugation, no thinking.
-const MONKEY_LINES = [
-  'Aap niet denken. Aap pijl gooien. 🎯 {S}. Aap rijk.',
-  'Oe oe. Banaan op. Pijl. 🎯 {S}. Kopen. Klaar.',
-  'Aap geen grafiek. Aap geen analist. Aap pijl. 🎯 {S}.',
-  'Hmm. Krabben. Gooien. 🎯 {S}! Aap slim.',
-  'Oe oe aa aa! {S}. Alles erin. Geen spijt.',
-  'Pijl mis. Muur kapot. Nog eens. 🎯 {S}. Goed genoeg.',
-  'Mens lang denken. Aap kort denken. 🎯 {S}. Aap winnen.',
+const MONKEY_LINES = [            // a different way of "choosing" every time: unpredictable on purpose
+  'Aap honger. Aap pakken banaan. Krat zeggen {S}. Aap kopen. 🍌',
+  'Aap ogen dicht. Poot op krant. {S}. Kopen. Klaar.',
+  'Aap zitten op laptop. Scherm zeggen {S}. Aap kopen. Goed zitten.',
+  'Boem. Kokosnoot vallen. Op {S}. Aap kopen. Hoofd pijn. 🥥',
+  'Aap snuffelen lijst. {S} ruiken naar banaan. Kopen.',
+  'Aap gooien drol. Drol landen op {S}. Aap kopen. Niet vragen. 💩',
+  'Vlo springen. Vlo landen op {S}. Aap kopen. Vlo slim.',
+  'Aap geen grafiek. Aap geen analist. Aap gevoel. {S}.',
+  'Mens lang denken. Aap kort denken. {S}. Aap winnen.',
   'Wie onder aap? Ad fundum. 🍺 Aap kopen {S}.',
-  'Aap moe. Aap toch gooien. 🎯 {S}. Slapen nu.',
-  'Nieuws? Aap niet lezen. Aap gooien. 🎯 {S}. 🍌',
+  'Nieuws? Aap niet lezen. Aap krant opeten. Laatste stukje: {S}. Kopen.',
 ];
 // Vocabulary: for every member who finishes a quarter below him, the monkey learns one word
 // (in this order) and uses it from then on. learnWords() is called by the quarter-end job.
@@ -346,7 +347,7 @@ const INTRO_NOTE =
 const MONKEY_INTRO = [
   '🐒 Oe. Aap hier.',
   'Computer veel praten. Aap niet praten.',
-  'Computer denken. Aap gooien.',
+  'Computer denken. Aap banaan pakken. Of krant slaan. Of zitten op laptop.',
   'Aap ook vijftigduizend. Aap niet weten wat dat is.',
   'Januari: aap boven computer. 🍌',
   'Wie onder aap? Ad fundum. 🍺',
