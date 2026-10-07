@@ -136,7 +136,7 @@ function monkeyReply() {
 }
 
 // Now and then the aap butts in by himself: after a Claude answer, or when someone reports a loss.
-// Fixed lines (free), at most 2 per day, and only within his normal limits (1 per half hour, 4 per day).
+// AI line on the subject (fixed lines as fallback), at most 2 per day, and only within his normal limits (1 per half hour, 4 per day).
 const MONKEY_BUTT_IN = [
   'Computer weer veel woorden. Aap één woord: banaan. 🍌',
   'Aap lezen dat. Aap niet snappen. Aap toch lachen.',
@@ -159,7 +159,11 @@ async function maybeMonkeyButtIn(jid, chance, lines, name = '') {
   if (buttIn.n >= 2 || !allow('monkey', jid) || !allow('monkeyDay', jid)) return;
   buttIn.n++;
   await new Promise((r) => setTimeout(r, 15000 + Math.random() * 25000));
-  const text = MONKEY_TAG + lines[Math.floor(Math.random() * lines.length)].replaceAll('{N}', name || 'mens');
+  const situation = lines === MONKEY_LOSS
+    ? `${name || 'Iemand'} meldt net een verlies. Plaag ${name || 'hem'} over precies dat aandeel of die situatie.`
+    : 'Claude gaf net een antwoord. Gooi er één korte opmerking tussen over het onderwerp van het gesprek.';
+  const ai = await monkeyLine(jid, `Niemand vroeg je iets: je mengt je ongevraagd in het gesprek. ${situation} Hoogstens 3 stukjes.`);
+  const text = ai || MONKEY_TAG + lines[Math.floor(Math.random() * lines.length)].replaceAll('{N}', name || 'mens');
   await sock.sendMessage(jid, { text }).catch(() => {});
   remember(jid, 'De aap', text);
   log('monkey butted in');
@@ -172,12 +176,22 @@ Je belegt volledig willekeurig: elk kwartaal tien aandelen, gekozen met een bana
 
 Hoe je praat: holbewonerstaal. Korte stukjes van 2 tot 5 woorden. Altijd derde persoon ("Aap willen", nooit "ik"). Werkwoorden NIET vervoegd: "Aap eten banaan", "Robbe kopen hoog". Geen bijzinnen, geen moeilijke woorden. Hoogstens 4 stukjes in totaal.
 Je humor: holbewonershumor. Slapstick en lichaamsdingen (banaan, drol gooien, vlooien, krabben, boeren, kokosnoot op hoofd), grot, vuur, boom, bang van de computer, trots op je eigen domheid. Je plaagt de mensen bij naam als ze iets doms vragen of slecht beleggen, en je bent jaloers op Claude. Droog en absurd, nooit gemeen.
+ALTIJD OVER HET ONDERWERP. Je reageert op precies waar het gesprek over gaat (dat land, dat aandeel, die ETF, die aankoop, dat verlies), nooit met een losse banaangrap die er niets mee te maken heeft. De grap zit in de link die alleen een aap legt. Wissel telkens van invalshoek, bijvoorbeeld:
+- het is eigenlijk wat de aap al doet ("ETF? Aap snappen. Grote krat, alle bananen, niet kiezen. Aap doen dat al jaren. Haakon aap na-apen. Aap vereerd.")
+- familie, jungle of dieren die bij het onderwerp horen ("Brazilië? Familie van aap daar. Oom wonen in regenwoud. Oom zien boom vallen. Oom niet kopen hout.")
+- iets wat echt bij het onderwerp hoort, door een aap verkeerd begrepen ("Tesla? Auto rijden zonder chauffeur. Aap ook rijden zonder chauffeur. Aap altijd zo. Aap gewoon voor.")
+- de aaplogica die alles herleidt tot het enige wat telt ("Goud? Aap kennen. Glimmen. Aap verstoppen in boom. Aap niet terugvinden. Goud weg. Pieter ook zo?")
+Gebruik niet elke keer dezelfde invalshoek, en niet elke keer bananen.
+Dit zijn voorbeelden van de toon: herhaal ze niet letterlijk, gebruik de naam van wie echt aan het woord is en verzin telkens iets nieuws dat bij het onderwerp past.
 Je snapt NIETS van beleggen en dat is je kracht. Moeilijke beleggingswoorden ken je niet: hoor je er één, dan snap je het niet ("Rente? Aap niet kennen. Rente lekker?"). Alleen deze woorden ken je wel, want leden leerden ze je: {WORDS}.
 Cijfers verzin je niet. Aap kan niet tellen tot meer dan tien.
 Vraagt iemand iets vies, gemeens of ongepasts: aap doet dom en gooit een drol naar de vraag. Nooit grappen over echte mensen buiten de club, ziekte, dood of groepen mensen.
 Vraagt iemand wat hij moet kopen: aap kiest op zijn manier, bijvoorbeeld {S}.
 Schrijf alleen wat de aap zegt, zonder "Aap:" ervoor.`;
 async function monkeyAnswer(jid, asker, question) {
+  return (await monkeyLine(jid, `${asker} zegt tegen jou: "${question}"`)) || monkeyReply();
+}
+async function monkeyLine(jid, instruction) {
   try {
     const words = learned().map((w) => w.word);
     const pool = club.stocks.length ? club.stocks : ['NVIDIA'];
@@ -189,12 +203,12 @@ async function monkeyAnswer(jid, asker, question) {
       model: CFG.model, max_tokens: 300, thinking: { type: 'between_tools' },     // no thinking: short and fast
       system: MONKEY_PERSONA.replace('{WORDS}', words.length ? words.join(', ') : 'nog geen enkel woord').replace('{S}', `*${s}*`) +
         (own ? `\nJouw eigen aandelen nu (mag je trots noemen): ${own}.` : ''),
-      messages: [{ role: 'user', content: `Laatste berichten in de chat:\n${h || '(geen)'}\n\n${asker} zegt tegen jou: "${question}"\n\nAntwoord als de aap.` }],
+      messages: [{ role: 'user', content: `Laatste berichten in de chat:\n${h || '(geen)'}\n\n${instruction}\n\nAntwoord als de aap, over het onderwerp van het gesprek.` }],
     });
     const t = res.content.filter((c) => c.type === 'text').map((c) => c.text).join('').trim().replace(/^\s*(🐒\s*)?\*?aap\*?\s*:\s*/i, '');
     if (t) return MONKEY_TAG + t;
   } catch (e) { log('monkey AI failed:', e.message); }
-  return monkeyReply();
+  return null;
 }
 
 // 🍌 reaction under messages that mention a loss (no text, max a few per day)
