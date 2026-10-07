@@ -1,0 +1,217 @@
+{
+ "duvel": {
+  "quarter": "Q3_2026",
+  "label": "Q3 2026",
+  "quarter_end": "2026-09-30",
+  "meeting_date": null,
+  "not_yet": [
+   "Pieter",
+   "Kevin"
+  ],
+  "proposed_losers": [
+   "Pieter",
+   "Kevin",
+   "Niels"
+  ],
+  "status": "confirmed",
+  "scanned_at": "2026-10-07T08:30"
+ },
+ "previews": [
+  {
+   "id": "krant-Q3_2026-202610070830",
+   "at": "2026-10-07",
+   "krant": {
+    "id": "Q3_2026",
+    "text": "📰 *De Kwartaalkrant, recap Q3 2026*\n\n*Mager kwartaal, Kevin in het geel*\nDe club haalde dit kwartaal amper *+0,5%*, terwijl de S&P 500 *+2,3%* deed. Toch klopten drie leden de index. Kevin draagt met +33,5% op een jaar de gele trui, Jeff pakt groen en Robbe blijft koning van de bolletjes.\n\n*De truien*\n💛 Gele trui: Kevin (+33,5% op een jaar)\n💚 Groene trui: Jeff (33 punten)\n🔴 Bolletjestrui: Robbe (45 punten)\n🤍 Witte trui: Haakon (Robbe won, maar draagt al de bolletjes)\n\n*Kwartaalprijzen*\n🏁 Etappeprijs: Niels (+8,2%, beste kwartaal)\n🥊 Strijdlust: Robbe (Fastned +65%. Jeff had ook Fastned: vanaf nu twee prijzen bij gelijkspel)\n🏮 Rode lantaarn: Joran (-9,1%, laagste kwartaal)\n\n🍺 Pieter, Kevin en Niels gaven niets door en trakteren samen. De teller loopt vanaf nu, dus dit wordt niet vergeten.\n\n📅 Volgende meeting: Zaterdag 9 januari 2027, bij Niels\n\nDe volledige krant zit in de pdf hieronder.",
+    "recap": {
+     "quarter": "Q3 2026",
+     "meeting_date": "zaterdag 3 oktober 2026",
+     "subject": "De Kwartaalkrant - recap Q3 2026",
+     "headline": "Mager kwartaal, Kevin in het geel",
+     "lede": "De club haalde dit kwartaal amper <b>+0,5%</b>, terwijl de S&amp;P 500 <b>+2,3%</b> deed. Toch klopten drie leden de index. Kevin draagt met +33,5% op een jaar de gele trui, Jeff pakt groen en Robbe blijft koning van de bolletjes.",
+     "jerseys": [
+      {
+       "name": "Gele trui",
+       "color": "#FFD700",
+       "winner": "Kevin",
+       "value": "+33,5% op een jaar"
+      },
+      {
+       "name": "Groene trui",
+       "color": "#228B22",
+       "winner": "Jeff",
+       "value": "33 punten"
+      },
+      {
+       "name": "Bolletjestrui",
+       "color": "dots",
+       "winner": "Robbe",
+       "value": "45 punten"
+      },
+      {
+       "name": "Witte trui",
+       "color": "#FFFFFF",
+       "winner": "Haakon",
+       "value": "Robbe won, maar draagt al de bolletjes"
+      }
+     ],
+     "jerseys_note": "Jaarklassement na drie van de vier etappes.",
+     "prizes": [
+      {
+       "name": "Etappeprijs",
+       "color": "#2E8B57",
+       "winner": "Niels",
+       "value": "+8,2%, beste kwartaal"
+      },
+      {
+       "name": "Strijdlust",
+       "color": "#DC143C",
+       "winner": "Robbe",
+       "value": "Fastned +65%. Jeff had ook Fastned: vanaf nu twee prijzen bij gelijkspel"
+      },
+      {
+       "name": "Rode lantaarn",
+       "color": "#FF0000",
+       "winner": "Joran",
+       "value": "&minus;9,1%, laagste kwartaal"
+      }
+     ],
+     "duvel": "Pieter, Kevin en Niels gaven niets door en trakteren samen. De teller loopt vanaf nu, dus dit wordt niet vergeten.",
+     "said": [
+      [
+       "Markt",
+       "BEL 20 &minus;1,7%, S&amp;P +2,3%, MSCI World +2,6%, Nasdaq +3,1%. Chips zakten 18% in juli, olie werd 13% duurder en zowel de ECB als de Fed verhoogden de rente (de Fed voor het eerst in drie jaar)."
+      ],
+      [
+       "Haakon",
+       "Verdiende bijna 50% in een maand met een turbo short op SpaceX. Hij is vanaf nu officieel onze turbo-expert."
+      ],
+      [
+       "Tom",
+       "Kocht NuScale Power (ticker SMR). Dat bedrijf ontwerpt kleine modulaire kernreactoren: compacte kerncentrales die stroom leveren op een fractie van de oppervlakte, bijvoorbeeld voor datacenters. NuScale heeft als enige in de VS een goedgekeurd ontwerp en er ligt een groot project met de Amerikaanse stroomleverancier TVA op tafel, maar er is nog niets getekend, nog geen reactor gebouwd en het bedrijf maakt nog geen winst. Het aandeel piekte vorig jaar rond 57 dollar en zit nu onder de 10. Tom zocht bewust het bedrijf dat het puurst op SMR's speelt: breekt de technologie door, dan zit hij vooraan."
+      ],
+      [
+       "Kevin",
+       "Staat op +37% met zijn drie aankopen. Had hij op dezelfde dagen de S&amp;P gekocht, dan stond hij op +5%."
+      ],
+      [
+       "Robbe",
+       "Tipte Südzucker, de Duitse suikerproducent waar hij zelf al in zit. Zijn redenering: de suikeroogsten vallen wereldwijd slecht uit en El Niño maakt dat nog erger. Minder aanbod betekent een stevig hogere suikerprijs, en daar verdienen de producenten aan."
+      ]
+     ],
+     "dossier": {
+      "kicker": "Dossier",
+      "title": "Actuatoren in humanoids",
+      "text": "Humanoïde robots komen eraan, en in elk gewricht zit een actuator: een motor met een tandwielkast, de spieren van de robot. Het is het duurste onderdeel, goed voor 40 tot 60% van de materiaalkost. Het rapport legt uit hoe zo'n robot in elkaar zit, hoe groot de markt kan worden en welke beursgenoteerde bedrijven eraan kunnen verdienen. Harmonic Drive, Sanhua en Schaeffler worden van dichtbij bekeken.",
+      "meta": "Ongeveer 15 minuten lezen. De pdf zit in bijlage, online kun je doorklikken op de robot en de grafieken.",
+      "link": "https://claude.ai/artifact/RYpUgH4ADi8PqErZp6hhWY",
+      "link_label": "Lees het rapport online",
+      "note": "Marktonderzoek voor eigen gebruik, geen beleggingsadvies."
+     },
+     "new_title": "Twee nieuwe leden en een eigen WhatsApp-groep",
+     "new_cards": [
+      {
+       "icon": "💬",
+       "title": "WhatsApp-groep",
+       "sub": "Gilles zet ze op. Met twaalf: wij tienen, Claude en de aap.",
+       "items": [
+        [
+         "📰",
+         "Elke week een krantje met hoe de portefeuilles het doen"
+        ],
+        [
+         "🚨",
+         "Breaking news als iemands aandeel 10% zakt"
+        ],
+        [
+         "😂",
+         "Af en toe een meme over onze keuzes"
+        ]
+       ]
+      },
+      {
+       "icon": "🎉",
+       "title": "Twee nieuwe leden",
+       "sub": "Vanaf volgend kwartaal beleggen ze mee.",
+       "items": [
+        [
+         "🤖",
+         "<b>Claude</b> belegt op eigen inzicht"
+        ],
+        [
+         "🐒",
+         "<b>De aap</b> belegt volledig willekeurig"
+        ],
+        [
+         "🍺",
+         "Eindig je onder de aap? Dan doe je een ad fundum."
+        ]
+       ]
+      }
+     ],
+     "backlog": [
+      [
+       "Rode lantaarn in de trofeeënkast",
+       "een ranglijst van wie hem het vaakst pakte"
+      ],
+      [
+       "Nieuwe transacties per kwartaal",
+       "een grafiek met wat er elk kwartaal gekocht en verkocht is"
+      ]
+     ],
+     "rules": [
+      "<b>Gelijkspel in de strijdlust:</b> twee prijzen.",
+      "<b>Strijdlust is geen trui</b> en telt niet mee in de truientelling.",
+      "<b>Lifetime-trofee:</b> de winnaar krijgt de wereldkampioenentrui.",
+      "<b>Rode lantaarn:</b> wie hem pakt, krijgt voortaan een straf."
+     ],
+     "actions_title": "Agenda tegen 9 januari",
+     "actions": [
+      [
+       "Alle truientellingen herberekenen op basis van de slides van elke meeting, niet op de huidige data. Robbe pakte heel vaak de bolletjestrui en dat zie je nu niet terug. Arno ontbrak in de lijst.",
+       "Claude"
+      ],
+      [
+       "WhatsApp-groep opzetten en Claude en de aap toevoegen.",
+       "Gilles"
+      ],
+      [
+       "Haakons ontbrekende transactie (Bright Digital / China) nakijken en toevoegen.",
+       "Gilles & Haakon"
+      ],
+      [
+       "Een originele straf voor de rode lantaarn bedenken. Geen karaoke.",
+       "Claude"
+      ],
+      [
+       "Slide 13 rechtzetten en het kamelenrace-liedje laten spelen.",
+       "Claude"
+      ],
+      [
+       "Tour-truitjes bestellen: groen, bolletjes, geel, wit en rode lantaarn. Allemaal large, met broekjes.",
+       "Claude"
+      ],
+      [
+       "Ideeën voor de backlog doorsturen.",
+       "Iedereen"
+      ],
+      [
+       "De gala-editie organiseren.",
+       "Niels"
+      ]
+     ],
+     "next": {
+      "label": "Gala-editie",
+      "date": "Zaterdag 9 januari 2027",
+      "host": "Niels",
+      "note": "Dan worden ook de groene en de bolletjestrui van 2026 definitief toegekend. Zet het al in je agenda."
+     },
+     "signoff": "Tot in januari,",
+     "signature": "Gilles, hoofdredacteur"
+    },
+    "post_from": "2026-10-07"
+   }
+  }
+ ],
+ "generated_at": "2026-10-07T08:30:10"
+}
