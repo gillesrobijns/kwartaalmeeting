@@ -166,10 +166,49 @@ function adminJid() {
   if (CFG.adminPhone) return `${CFG.adminPhone}@s.whatsapp.net`;
   return existsSync(ADMIN_FILE) ? JSON.parse(readFileSync(ADMIN_FILE, 'utf8')).jid : null;
 }
-async function handlePrivate(msg) {
-  const text = textOf(msg).trim().toLowerCase();
+// ---------- private messages ----------
+// Club members can also talk to Claude one-to-one. Only people who are in one of the bot's
+// groups get an answer; strangers are ignored. DMs have their own budget, separate from the group.
+const PRIVATE_NOTE =
+  'In een privégesprek mag je iets uitgebreider zijn (hoogstens zes zinnen) en meer op zijn eigen portefeuille ingaan. ' +
+  'Dezelfde regels blijven gelden: geen eurobedragen, niets over het lopende kwartaal, geen professioneel advies. ' +
+  'Wat iemand jou privé vertelt, vertel je niet door in de groep, en je zegt niet wat anderen jou privé vroegen.\n\n';
+const DM_LIMITS = { perPersonDay: 10, totalDay: 40 };
+const DM_FILE = join(DATA_DIR, 'dm_usage.json');
+let dmUsage = existsSync(DM_FILE) ? JSON.parse(readFileSync(DM_FILE, 'utf8')) : {};
+function dmCount(who) {
+  if (dmUsage.day !== today()) dmUsage = { day: today(), total: 0, per: {} };
+  return { total: dmUsage.total, mine: dmUsage.per[who] || 0 };
+}
+function dmAdd(who) {
+  dmCount(who);
+  dmUsage.total += 1; dmUsage.per[who] = (dmUsage.per[who] || 0) + 1;
+  writeFileSync(DM_FILE, JSON.stringify(dmUsage));
+}
+let memberCache = { at: 0, ids: new Set() };
+async function clubMemberIds() {
+  if (Date.now() - memberCache.at < 10 * 60 * 1000 && memberCache.ids.size) return memberCache.ids;
+  const ids = new Set();
+  for (const g of introducedSet) {
+    try {
+      const md = await sock.groupMetadata(g);
+      for (const p of md.participants || []) for (const j of [p.id, p.lid, p.phoneNumber]) if (j) ids.add(userPart(j));
+    } catch (e) { log('group members:', e.message); }
+  }
+  memberCache = { at: Date.now(), ids };
+  return ids;
+}
+async function isClubMember(msg) {
   const from = msg.key.remoteJid;
-  if (text !== '/beheerder') return;
+  if (from === adminJid()) return true;
+  const ids = await clubMemberIds();
+  return [from, msg.key.remoteJidAlt, msg.key.senderPn, msg.key.senderLid].some((j) => j && ids.has(userPart(j)));
+}
+async function handlePrivate(msg) {
+  const raw = textOf(msg).trim();
+  const text = raw.toLowerCase();
+  const from = msg.key.remoteJid;
+  if (text !== '/beheerder') { if (raw) await privateChat(msg, raw); return; }
   if (adminJid()) {
     await sock.sendMessage(from, { text: adminJid() === from ? '✅ Je bent al de beheerder.' : 'Er is al een beheerder.' });
     return;
@@ -184,14 +223,54 @@ async function handlePrivate(msg) {
   writeFileSync(f, '[]');
 }
 
-async function askClaude(jid, asker, question, extra = '') {
+async function privateChat(msg, text) {
+  const from = msg.key.remoteJid;
+  if (!(await isClubMember(msg))) { log(`ignored DM from non-member ${from}`); return; }
+  const name = msg.pushName || 'iemand';
+  if (Date.now() - (cooldown.get(from) || 0) < 5000) return;      // double-tap protection
+  cooldown.set(from, Date.now());
+  remember(from, name, text);
+
+  if (isForMonkey(text)) {                                          // "aap, ..." works privately too
+    const reply = monkeyReply();
+    await sock.sendMessage(from, { text: reply }, { quoted: msg });
+    remember(from, 'De aap', reply);
+    return;
+  }
+  const { total, mine } = dmCount(from);
+  if (mine >= DM_LIMITS.perPersonDay || total >= DM_LIMITS.totalDay) {
+    if (mine === DM_LIMITS.perPersonDay || total === DM_LIMITS.totalDay) {
+      dmAdd(from);
+      await sock.sendMessage(from, { text: CLAUDE_TAG + 'Genoeg privé gebabbeld voor vandaag. Morgen weer, of stel je vraag in de groep. 🍺' });
+    }
+    return;
+  }
+  await sock.sendPresenceUpdate('composing', from).catch(() => {});
+  let answer;
+  try { answer = await askClaude(from, name, text, '', true); }
+  catch (e) {
+    log('claude DM error:', e.status || '', e.message);
+    answer = 'Even een kortsluiting in mijn hoofd. Probeer het zo nog eens.';
+  }
+  await sock.sendPresenceUpdate('paused', from).catch(() => {});
+  if (!answer) return;
+  await sock.sendMessage(from, { text: asClaude(answer) });
+  dmAdd(from);
+  remember(from, 'Claude', answer);
+  log(`DM answered for ${name}`);
+}
+
+async function askClaude(jid, asker, question, extra = '', priv = false) {
   const h = history.get(jid) || [];
   const transcript = h.map((m) => `${m.name}: ${m.text}`).join('\n');
   const messages = [{
     role: 'user',
     content: `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
-             `Recente berichten in de groep (oudste eerst):\n${transcript || '(geen)'}\n\n` +
-             `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`,
+             (priv
+               ? `Dit is een PRIVÉGESPREK met ${asker}, niet de groep. Eerdere berichten in dit gesprek (oudste eerst):\n${transcript || '(geen)'}\n\n` +
+                 `${asker} schrijft je nu: "${question}"\n\n${extra}${PRIVATE_NOTE}Schrijf alleen je antwoord aan ${asker}.`
+               : `Recente berichten in de groep (oudste eerst):\n${transcript || '(geen)'}\n\n` +
+                 `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`),
   }];
   let text = '';
   for (let round = 0; round < 4; round++) {
