@@ -339,11 +339,14 @@ const INTRO_FILE = join(DATA_DIR, 'introduced.json');
 const introducedSet = new Set(existsSync(INTRO_FILE) ? JSON.parse(readFileSync(INTRO_FILE, 'utf8')) : []);
 const introduced = (jid) => introducedSet.has(jid);
 const INTRO_NOTE =
-  'Dit is je allereerste bericht in deze groep: stel jezelf voor. Reageer kort op wat er net gezegd werd. ' +
-  'Open met één scherpe observatie die toont dat je hun portefeuilles al gelezen hebt (iets wat klopt volgens de clubdata). ' +
-  'Vertel dan dat je vanaf Q4 2026 meebelegt met €50.000 virtueel geld, dat je elke maandag beslist en elke aankoop hier meldt met de reden erbij, zodat ze je kunnen uitlachen als het misloopt. ' +
-  'Leg tot slot in één of twee zinnen uit hoe ze je gebruiken: tag @Claude voor cijfers, nieuws of een mening; ideeën voor het dashboard geef je door aan Gilles; eurobedragen en het lopende kwartaal krijgen ze niet. ' +
-  'Hoogstens drie korte alinea\'s, geen opsomming. Stel de aap niet voor: die doet dat zelf meteen na jou.\n\n';
+  'Dit is je allereerste bericht in deze groep: stel jezelf voor. Je wilt dat ze na dit bericht denken: oei, die heeft ons door. ' +
+  'Geen begroeting, geen emoji, geen uitroeptekens: begin meteen met je scherpste vaststelling. ' +
+  'ANALYSE: kies uit de clubdata de één of twee inzichten die het meest pijn doen en niet voor de hand liggen. Denk aan: hoeveel leden dit jaar (YTD) slechter deden dan gewoon een MSCI World- of S&P 500-tracker kopen en gaan slapen; ' +
+  'het groepsgemiddelde tegenover de benchmark; hoe geconcentreerd de club is (zelfde aandelen, één aandeel als halve portefeuille); wie zijn rendement aan één aandeel te danken heeft; wie veel handelt zonder dat het iets oplevert. ' +
+  'Gebruik echte namen en exacte cijfers uit de clubdata, en tel zelf correct. Trek er een conclusie uit in één zin, alsof je een diagnose stelt. Droog en zelfzeker, niet gemeen: plagen mag, beledigen niet. ' +
+  'POSITIE: zeg dan wat jij daarom anders gaat doen. Vanaf Q4 2026 beleg je mee met €50.000 virtueel geld: gespreid, kwaliteit, bewust andere aandelen dan de club, hoogstens twee transacties per week, elke maandag een beslissing, en elke aankoop meld je hier met de reden erbij. Eindig die alinea met een korte, uitdagende zin richting de groep. ' +
+  'GEBRUIK: één zin: tag @Claude voor cijfers, nieuws of een mening; ideeën voor het dashboard gaan naar Gilles; eurobedragen en het lopende kwartaal krijgen ze niet. ' +
+  'Hoogstens drie korte alinea\'s en 120 woorden, geen opsomming, geen vette tekst. Stel de aap niet voor: die doet dat zelf meteen na jou; je mag hem in je laatste zin het woord geven.\n\n';
 const MONKEY_INTRO = [
   '🐒 Oe. Aap hier.',
   'Computer veel praten. Aap niet praten.',
