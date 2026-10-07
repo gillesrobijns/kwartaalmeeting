@@ -305,10 +305,68 @@ async function verdictPost(to) {
   log(`verdict for ${p.quarter} posted`);
 }
 
+// ---------- catch-up: questions Claude left unanswered (⏳, daily cap) ----------
+// Only on Gilles' word: he sends "/gemist" privately. Claude reads the recent group chat, finds the questions
+// to him that never got an answer and writes ONE catch-up message. Gilles sees it first: ja / opnieuw / nee.
+let catchup = null;                                                // { jid, text, items }
+async function composeCatchup(jid) {
+  const h = history.get(jid) || [];
+  const transcript = h.map((m) => `${m.name}: ${m.text}`).join('\n');
+  const messages = [{ role: 'user', content:
+    `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
+    `Recente berichten in de groep (oudste eerst; "Claude" ben jij, regels van "(bot)" zijn notities van het systeem):\n${transcript || '(geen)'}\n\n` +
+    'Door je limiet van berichten per uur heb je sommige leden die jou aanspraken geen antwoord gegeven (je zette dan alleen een ⏳). ' +
+    'Zoek de vragen of opmerkingen aan jou die nog GEEN antwoord kregen, ook niet van jou in een later bericht en ook niet meer nodig zijn omdat het gesprek al verder ging (sla die over). ' +
+    'Schrijf daarna ÉÉN bericht voor de groep dat ze alsnog beantwoordt: begin kort en luchtig (je zat even vast), en spreek elke persoon aan met de naam, met een kort antwoord per persoon. Hoogstens 8 zinnen in totaal.\n\n' +
+    'Antwoord ALLEEN met JSON, zonder uitleg: {"gemist":[{"wie":"naam","vraag":"korte samenvatting"}],"bericht":"het bericht voor de groep"}. Is er niets gemist, dan {"gemist":[],"bericht":""}.' }];
+  let text = '';
+  for (let round = 0; round < 3; round++) {
+    const res = await anthropic.messages.create({
+      model: CFG.model, max_tokens: 4000,
+      system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
+      tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 3 }],
+      messages,
+    });
+    text = finalText(res.content);
+    if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
+    break;
+  }
+  const a = text.indexOf('{'), b = text.lastIndexOf('}');
+  const out = JSON.parse(text.slice(a, b + 1));
+  return { items: Array.isArray(out.gemist) ? out.gemist : [], text: String(out.bericht || '').trim() };
+}
+async function catchupPreview(to) {
+  const jid = [...introducedSet].find((g) => (history.get(g) || []).length);
+  if (!jid) { await sock.sendMessage(to, { text: CLAUDE_TAG + 'Ik vind geen groepsgesprek om na te kijken.' }); return; }
+  await sock.sendMessage(to, { text: CLAUDE_TAG + 'Even kijken wat ik gemist heb…' });
+  let r;
+  try { r = await composeCatchup(jid); }
+  catch (e) { log('catchup failed:', e.message); await sock.sendMessage(to, { text: CLAUDE_TAG + `Dat lukte niet (${e.message}). Probeer het zo opnieuw met /gemist.` }); return; }
+  if (!r.items.length || !r.text) { catchup = null; await sock.sendMessage(to, { text: CLAUDE_TAG + `✅ Niets gemist in de laatste ${(history.get(jid) || []).length} berichten van de groep.` }); return; }
+  catchup = { jid, text: asClaude(r.text), items: r.items };
+  await sock.sendMessage(to, { text: `👀 *Gemist (${r.items.length})*\n${r.items.map((i) => `• ${i.wie}: ${i.vraag}`).join('\n')}\n\n` +
+    `*Voorstel voor de groep* (de groep ziet dit nog niet):\n\n${catchup.text}\n\n` +
+    'Antwoord *ja* om het te posten, *opnieuw* voor een andere versie of *nee* om te stoppen.' });
+  log(`catchup preview sent (${r.items.length} items)`);
+}
+async function catchupPost(to) {
+  const c = catchup; catchup = null;
+  if (!c) return;
+  await sock.sendMessage(c.jid, { text: c.text });
+  countReply();
+  remember(c.jid, 'Claude', c.text.replace(CLAUDE_TAG, ''));
+  await sock.sendMessage(to, { text: '✅ Gepost in de groep.' });
+  log('catchup posted');
+}
+
 // Admin commands, private chat only. Returns true when the message was a command.
 async function adminCommand(from, text) {
   if (from !== adminJid()) return false;
   if (/^\/(meeting|aap)\b/.test(text)) { await verdictPreview(from); return true; }
+  if (/^\/gemist\b/.test(text)) { await catchupPreview(from); return true; }
+  if (catchup && /^(ja|yes|ok|post)\b/.test(text)) { await catchupPost(from); return true; }
+  if (catchup && /^opnieuw\b/.test(text)) { catchup = null; await catchupPreview(from); return true; }
+  if (catchup && /^(nee|stop)\b/.test(text)) { catchup = null; await sock.sendMessage(from, { text: CLAUDE_TAG + 'Gestopt. Er is niets gepost.' }); return true; }
   const vrij = text.match(/^\/vrij(?:\s+(\d+(?:[.,]\d+)?))?\s*$/);
   if (vrij) {
     const hours = Math.min(24, Number((vrij[1] || '3').replace(',', '.')) || 3);
@@ -759,9 +817,11 @@ async function handle(msg) {
 
   if (!isFree() && !allow('claude', jid)) {
     await sock.sendMessage(jid, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+    remember(jid, '(bot)', `⏳ Claude gaf ${name} geen antwoord (limiet per uur).`);
     return;
   }
   if (repliesToday() >= dailyLimit()) {
+    remember(jid, '(bot)', `Claude gaf ${name} geen antwoord (dagbudget op).`);
     if (repliesToday() === dailyLimit()) {
       countReply();
       await sock.sendMessage(jid, { text: CLAUDE_TAG + 'Ik heb vandaag genoeg gepraat, mijn budget is op. Morgen ben ik er weer! 🍺' });
