@@ -1087,13 +1087,14 @@ body.privacy-on .eur:hover { filter: none; }
   .rm-col-body { padding: .7rem; }
 }
 
-/* BOTS-V1 + BOTS-V2: Claude (lid 11) en de aap (lid 12) */
-.data-table tr.bot-row td,.heatmap-table tr.bot-row td:first-child{background:#f6f7f9;font-style:italic;color:var(--text-muted)}
-[data-theme="dark"] .data-table tr.bot-row td,[data-theme="dark"] .heatmap-table tr.bot-row td:first-child{background:#20243a}
+/* BOTS-V1..V3: Claude (lid 11) en de aap (lid 12) */
+/* BOTS-V3: calm ranking. Bots: muted italic, no fill. Below the aap: a small beer glass after the name. */
+.data-table tr.bot-row td,.heatmap-table tr.bot-row td:first-child{font-style:italic;color:var(--text-muted)}
+#overview-ranking tr.winner td,#overview-ranking tr.loser td{background:transparent}
+#overview-ranking td.mono.positive{color:var(--text)}
+.beer-mark{font-size:.8rem;margin-left:6px;opacity:.85;font-style:normal}
 .bot-row td.name,.bot-row td.bot-link{cursor:pointer}
 /* BOTS-V2: members below the aap get a soft amber row (they owe an ad fundum) */
-.data-table tr.below-ape td{background:#fdf3e2}
-[data-theme="dark"] .data-table tr.below-ape td{background:#33291c}
 .bot-av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0;font-style:normal}
 .bot-tag{font-size:.56rem;letter-spacing:.06em;color:#94a3b8;border:1px solid rgba(148,163,184,.45);border-radius:4px;padding:0 4px;margin-left:auto}
 .bots-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.75rem}
@@ -2698,7 +2699,7 @@ function renderOverviewRanking(ret, sp) {
       ? '<td style="text-align:center;font-size:1rem">'+medal+'</td>'
       : '<td class="'+rc+'" style="text-align:center;font-weight:700;color:var(--text-muted)">'+rk+'</td>';
     html += '<tr class="'+cls+_apeAttr(rows, i)+'">'+rankCell+
-      '<td class="name" onclick="navigateToMember(\''+r.member+'\')">'+r.member+'</td>'+
+      '<td class="name" onclick="navigateToMember(\''+r.member+'\')">'+r.member+_beer(rows, i)+'</td>'+
       '<td class="right mono '+pctClass(r.return_pct)+'">'+pct(r.return_pct)+'</td>'+barCell+'</tr>';
   });
   tb.innerHTML = html;
@@ -2820,7 +2821,7 @@ function renderYTDTable(ret) {
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+rk+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
-        '<div><div class="stock-name">'+r.member+'</div>'+
+        '<div><div class="stock-name">'+r.member+_beer(rows, i)+'</div>'+
         '<div class="m-sub eur">'+eur(r.value_start)+' → '+eur(r.value_end)+'</div></div></div></td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_start)+'</td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_end)+'</td>' +
@@ -2842,7 +2843,7 @@ function renderQuarterlyDetail(ret) {
       '<td style="text-align:center;font-weight:700;color:var(--text-muted);width:28px">'+rk+'</td>' +
       '<td style="cursor:pointer" onclick="navigateToMember(\''+r.member+'\')">' +
         '<div style="display:flex;align-items:center;gap:8px">'+_memberAvatar(r.member)+
-        '<div><div class="stock-name">'+r.member+'</div>'+
+        '<div><div class="stock-name">'+r.member+_beer(rows, i)+'</div>'+
         '<div class="m-sub eur">'+eur(r.value_start)+' · koop '+eur(r.bought)+' · verkoop '+eur(r.sold)+'</div></div></div></td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.value_start)+'</td>' +
       '<td class="right eur" style="font-size:0.82rem">'+eur(r.bought)+'</td>' +
@@ -2871,7 +2872,8 @@ function _belowApe(rows, i) {                   // BOTS-V2: members below the aa
   const a = rows.findIndex(x => x.bot && x.member === 'Aap');
   return a >= 0 && i > a && !rows[i].bot;
 }
-function _apeAttr(rows, i) { return _belowApe(rows, i) ? ' below-ape" title="Onder de aap: ad fundum' : ''; }
+function _apeAttr(rows, i) { return _belowApe(rows, i) ? ' below-ape' : ''; }
+function _beer(rows, i) { return _belowApe(rows, i) ? '<span class="beer-mark" title="Onder de aap: ad fundum">\uD83C\uDF7A</span>' : ''; }
 function _botTableRow(r, dashCols, maxV) {
   const m = BOT_META[r.member];
   return '<tr class="bot-row"><td style="text-align:center;width:28px">–</td>' +
