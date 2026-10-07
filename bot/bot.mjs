@@ -9,7 +9,7 @@ import makeWASocket, {
 } from 'baileys';
 import Anthropic from '@anthropic-ai/sdk';
 import pino from 'pino';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { createServer } from 'node:http';
@@ -58,13 +58,29 @@ function countReply() {
 }
 const repliesToday = () => usage[today()] || 0;
 
-// ---------- chat memory per group ----------
+// ---------- chat memory per group (survives restarts) ----------
+const HISTORY_FILE = join(DATA_DIR, 'history.json');
 const history = new Map();                                        // jid -> [{name, text}]
+try {
+  if (existsSync(HISTORY_FILE)) {
+    for (const [jid, h] of Object.entries(JSON.parse(readFileSync(HISTORY_FILE, 'utf8')))) {
+      if (Array.isArray(h)) history.set(jid, h.slice(-CFG.historySize));
+    }
+  }
+} catch (e) { console.log('history.json unreadable, starting empty:', e.message); }
+function saveHistory() {
+  try {                                                           // write to a temp file first, so a crash never leaves half a file
+    const tmp = HISTORY_FILE + '.tmp';
+    writeFileSync(tmp, JSON.stringify(Object.fromEntries(history)));
+    renameSync(tmp, HISTORY_FILE);
+  } catch (e) { console.log('history save failed:', e.message); }
+}
 function remember(jid, name, text) {
   const h = history.get(jid) || [];
   h.push({ name, text: text.slice(0, 1000) });
   while (h.length > CFG.historySize) h.shift();
   history.set(jid, h);
+  saveHistory();
 }
 
 // ---------- who is talking ----------
