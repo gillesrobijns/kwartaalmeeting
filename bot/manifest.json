@@ -1,9 +1,9 @@
 {
- "version": "20261007-0707",
+ "version": "20261007-0714",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "dc4307839788623bdfa383f3ee5642eb4ed725858e431216637c656ee0996d0a"
+   "sha256": "e75abdd8f68bdc745cb56bbd489014c4dbffbcc4d167ca896d0fa75b95ab3a13"
   },
   {
    "name": "clubdata.mjs",
