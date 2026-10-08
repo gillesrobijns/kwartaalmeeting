@@ -91,6 +91,10 @@ const RULES = `Je leest transacties uit berichten van leden van een beleggingscl
   `- "onduidelijk" bevat ALLEEN vragen die echt nog open staan, kort en aan het lid gericht ("je"). Is alles duidelijk, laat het leeg. Herhaal niet wat het lid al zei en leg niet uit wat je deed.`;
 
 export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJid, claudeTag = '🤖 Claude: ', jobs = true }) {
+  // Andere kanalen (mail, formulier, broker-meldingen: kanalen.mjs) praten via een virtueel adres zoals "mail:Kevin".
+  // Berichten naar zo'n adres gaan niet naar WhatsApp maar naar een opvanger die het kanaal zelf zet.
+  const virt = new Map();                                         // vjid -> { member, via, sink(text) }
+  const viaOf = (jid) => virt.get(jid)?.via || 'WhatsApp';
   const STATE_FILE = join(dataDir, 'invoer.json');
   const USAGE_FILE = join(dataDir, 'invoer_usage.json');
   const QUEUE_FILE = join(dataDir, 'invoer_queue.json');
@@ -104,7 +108,12 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
 
   const config = () => load(join(hereDir, 'invoer_config.json'), {});
   const token = () => createHash('sha256').update(`kwartaal-invoer|${process.env.ANTHROPIC_API_KEY || ''}`).digest('hex').slice(0, 32);
-  const send = (jid, text) => getSock().sendMessage(jid, { text: claudeTag + text });
+  const send = async (jid, text) => {
+    const v = virt.get(jid);
+    if (v) { v.sink(text); return; }
+    return getSock().sendMessage(jid, { text: claudeTag + text });
+  };
+  const typing = (jid) => (virt.has(jid) ? Promise.resolve() : getSock().sendPresenceUpdate('composing', jid).catch(() => {}));
 
   function stockList() {
     try { return Object.keys(JSON.parse(readFileSync(join(hereDir, 'tickers.json'), 'utf8'))).sort(); }
@@ -132,16 +141,19 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   }
 
   // ---------- lezen ----------
-  async function read({ model, member, text, imgs, previous, correction }) {
+  async function read({ model, member, text, imgs, previous, correction, hint, maxTokens }) {
     const parts = [];
-    for (const i of imgs || []) parts.push({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } });
+    for (const i of imgs || []) parts.push(i.media_type === 'application/pdf'
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: i.data } }
+      : { type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } });
     let prompt = `Vandaag is het ${today()}.\n`;
     if (previous) prompt += `\nVORIGE VERSIE (die jij eerder las):\n${JSON.stringify(previous)}\n\nCORRECTIE VAN HET LID: "${correction}"\n`;
     else prompt += `\nBericht van het lid: "${text || '(alleen een afbeelding)'}"\n`;
+    if (hint) prompt += `\n${hint}\n`;
     parts.push({ type: 'text', text: prompt });
     const req = {
       model,
-      max_tokens: 2000,
+      max_tokens: maxTokens || 2000,
       system: [
         { type: 'text', text: RULES },
         { type: 'text', text: `AANDELENLIJST (namen zoals in de sheets van de club):\n${stockList().join('\n')}`, cache_control: { type: 'ephemeral' } },
@@ -297,7 +309,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     return proposal(p.member, r);
   }
   async function step(jid, p, prefix = '') {
-    await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
+    await typing(jid);
     const msg = await advance(jid, p);
     p.at = Date.now();
     state.pending[jid] = p;
@@ -573,21 +585,21 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   }
 
   // ---------- schrijven ----------
-  async function write(jid, member, rows) {
+  async function write(jid, member, rows, via = viaOf(jid)) {
     const url = config().webapp_url;
     if (!url) {
       const q = load(QUEUE_FILE, []);
       q.push({ member, rows, at: new Date().toISOString() });
       save(QUEUE_FILE, q);
       const a = adminJid();
-      if (a) await getSock().sendMessage(a, { text: claudeTag + `📥 ${member} gaf via WhatsApp door (nog niet automatisch in de sheet, zet het er zelf in):\n` +
+      if (a) await getSock().sendMessage(a, { text: claudeTag + `📥 ${member} gaf via ${via} door (nog niet automatisch in de sheet, zet het er zelf in):\n` +
         rows.map((x) => `• ${TYPE_NL[x.type]} ${x.type === 'Dividend' ? '' : `${num(x.shares)} × `}${x.stock} · ${eur(x.total_eur)} · ${dmy(x.date)}`).join('\n') }).catch(() => {});
       return { queued: true };
     }
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'text/plain' },                // Apps Script: geen CORS-preflight nodig
-      body: JSON.stringify({ token: token(), action: 'append', member, source: 'WhatsApp', rows }),
+      body: JSON.stringify({ token: token(), action: 'append', member, source: via, rows }),
       redirect: 'follow',
     });
     const txt = await res.text();
@@ -616,7 +628,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     const p = state.pending[jid];
     if (p && Date.now() - p.at > PENDING_TTL) { delete state.pending[jid]; saveState(); }
     const pending = state.pending[jid];
-    const member = state.members[jid] || (isAdmin ? 'Gilles' : null);
+    const member = state.members[jid] || virt.get(jid)?.member || (isAdmin ? 'Gilles' : null);
 
     // Wie ben je? (eenmalig per nummer)
     if (pending?.stage === 'wie') {
@@ -728,7 +740,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
           ...(x.force ? { force: true } : {}), ...(x.nieuw && x.isin ? { isin: x.isin } : {}) }));
         delete state.pending[jid]; saveState();
         try {
-          const out = await write(jid, pending.member, rows);
+          const out = await write(jid, pending.member, rows, pending.via || viaOf(jid));
           if (out.queued) await send(jid, '✅ Goedgekeurd. Gilles zet het in je sheet; de maandagscan neemt het daarna mee.');
           else {
             const done = (out.results || []).filter((x) => x.status === 'written').length;
@@ -739,7 +751,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
             if (dup) t += `${t ? '\n' : ''}${dup > 1 ? `${dup} rijen stonden` : 'Die rij stond'} al in je sheet, dus niets dubbel ingegeven.`;
             await send(jid, t || 'Niets ingegeven.');
             const a = adminJid();
-            if (a && a !== jid && done) getSock().sendMessage(a, { text: claudeTag + `📥 ${pending.member} gaf ${done} transactie${done > 1 ? 's' : ''} door via WhatsApp: ${[...new Set(rows.map((x) => x.stock))].join(', ')}` }).catch(() => {});
+            if (a && a !== jid && done) getSock().sendMessage(a, { text: claudeTag + `📥 ${pending.member} gaf ${done} transactie${done > 1 ? 's' : ''} door via ${pending.via || viaOf(jid)}: ${rows.map((x) => `${TYPE_NL[x.type]} ${x.stock}`).join(', ')}` }).catch(() => {});
             const fresh = rows.filter((x) => x.isin);
             if (a && done && fresh.length) getSock().sendMessage(a, { text: claudeTag + `🆕 ${pending.member} gaf een nieuw aandeel door: ${fresh.map((x) => `${x.stock} (ISIN ${x.isin})`).join(', ')}. Staat nog niet in de lijst; de maandagscan vraagt de classificatie.` }).catch(() => {});
           }
@@ -761,7 +773,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     for (const [j, v] of images) if (Date.now() - v.at > IMAGE_TTL) images.delete(j);
     if (!budgetOk(jid)) return false;
 
-    await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
+    await typing(jid);
     const r = await readSmart({ member, text: raw, imgs }, jid);
     saveState();
     if (r && !r.is_transactie && imgs.length && (r.posities || []).length && (!raw || CHECK_RE.test(raw))) {
@@ -785,11 +797,11 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
 
   async function correct(jid, pending, raw) {
     if (!budgetOk(jid)) { await send(jid, 'Genoeg gelezen voor vandaag. Morgen weer, of zet het zelf in je sheet.'); return true; }
-    await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
+    await typing(jid);
     const r = await readSmart({ member: pending.member, imgs: images.get(jid)?.images || [], previous: clean(pending.r), correction: raw }, jid, (pending.tries || 0) >= 1);
     saveState();
     if (!r || !r.rijen?.length) { await send(jid, 'Dat begrijp ik niet goed. Zeg wat er anders moet, of *stop*.'); return true; }
-    await step(jid, { member: pending.member, r: carry(pending.r, r), tries: (pending.tries || 0) + 1, sheet: pending.sheet });
+    await step(jid, { member: pending.member, r: carry(pending.r, r), tries: (pending.tries || 0) + 1, sheet: pending.sheet, ...(pending.via ? { via: pending.via } : {}) });
     return true;
   }
 
@@ -807,5 +819,6 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       `\nWebapp: ${config().webapp_url ? 'ingesteld' : 'nog niet ingesteld'}`;
   }
 
-  return { handle, report, tick, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendJob, scanReceipts, tick } };
+  return { handle, report, tick, MODELS, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendJob, scanReceipts, tick,
+    virt, send, step, write, budgetOk, spend, saveState, token, config, stockList, holdings, YES, NO, UP, eur, num, dmy, TYPE_NL, MEMBERS } };
 }
