@@ -1,5 +1,5 @@
 {
- "version": "20261008-0818",
+ "version": "20261008-1029",
  "files": [
   {
    "name": "bot.mjs",
@@ -55,7 +55,7 @@
   },
   {
    "name": "invoer_config.json",
-   "sha256": "b8fd0c0507b1bcf67d55483400263421b63997554c22f8fe940d3ff4a554368a"
+   "sha256": "669ee8f33d741aff25cb63042b690ebb30f7f142e1d06b5c171095433f8d19f3"
   },
   {
    "name": "models.json",
