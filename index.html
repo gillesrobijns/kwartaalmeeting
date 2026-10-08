@@ -3036,7 +3036,7 @@ function _renderMemberTxTable(showAll) {
   const shown = cut ? rows.slice(0, LIM) : rows;
   const html = shown.map(r => {
     const d = r.date ? new Date(String(r.date).slice(0, 10) + 'T12:00:00').toLocaleDateString('nl-BE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-    const per = r.shares ? (r.total_eur || 0) / r.shares : null;
+    const per = r.price_eur != null ? r.price_eur : (r.shares ? (r.total_eur || 0) / r.shares : null);   // price_eur: exact, also in the public build
     const why = r.bot && r.reason ? '<div class="tx-why">' + String(r.reason).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])) + '</div>' : '';
     return '<tr><td class="mono">' + d + '</td>' +
       '<td><span class="tx-type ' + r._t + '"><i></i>' + (r._t === 'buy' ? 'Koop' : 'Verkoop') + '</span></td>' +
