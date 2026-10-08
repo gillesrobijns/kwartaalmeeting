@@ -1,5 +1,5 @@
 {
- "version": "20261008-1414",
+ "version": "20261008-1416",
  "files": [
   {
    "name": "bot.mjs",
@@ -63,7 +63,7 @@
   },
   {
    "name": "kanalen.mjs",
-   "sha256": "4289171e49833c0e2d261285eecb92631769b007cc92cb95df8b0c6d7e0e172f"
+   "sha256": "90b29b1500b260cc472c5caadae6c3d9deb1ef159bc1366f07f77fcfb1dd6d38"
   }
  ]
 }
