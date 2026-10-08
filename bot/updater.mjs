@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 
 const BASE = process.env.UPDATE_URL || 'https://gillesrobijns.github.io/kwartaalmeeting/bot/';
 const ALLOWED = new Set(['bot.mjs', 'clubdata.mjs', 'updater.mjs', 'pricewatch.mjs', 'persona.md', 'package.json', 'claude_strategie.md', 'tickers.json',
-  'trader.mjs', 'autopost.mjs', 'pdf.mjs', 'universe.json']);
+  'trader.mjs', 'autopost.mjs', 'pdf.mjs', 'universe.json', 'invoer.mjs', 'invoer_config.json']);
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
 
 export async function checkForUpdate(dir, log = console.log) {
