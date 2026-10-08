@@ -1,5 +1,5 @@
 {
- "version": "20261008-1141",
+ "version": "20261008-1146",
  "files": [
   {
    "name": "bot.mjs",
@@ -51,7 +51,7 @@
   },
   {
    "name": "invoer.mjs",
-   "sha256": "937bdd384297bd11a5f81616c4222a15cfabe32d4f1c4d7789cb1a305756b3ac"
+   "sha256": "390b7a5e60e1f5d4cb06325035500527b2350b4936f4a4e8dbe35c4c54bd57f8"
   },
   {
    "name": "invoer_config.json",
