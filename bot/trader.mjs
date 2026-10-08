@@ -51,11 +51,12 @@ async function chart(ticker, range = '1mo', interval = '1d') {
   return { meta: res.meta, closes };
 }
 const fxCache = new Map();
+const rangeFor = (date) => (!date ? '3mo' : (Date.now() - new Date(`${date}T12:00:00Z`)) / 864e5 > 80 ? '5y' : '3mo');   // oudere datum: langere reeks
 async function fxOn(cur, date) {                       // units of `cur` per 1 EUR, at the close of `date` (or the last one before)
   if (cur === 'EUR') return 1;
   const key = `${cur}|${date || 'now'}`;
   if (fxCache.has(key) && (date || Date.now() - fxCache.get(key).at < 10 * 60 * 1000)) return fxCache.get(key).v;
-  const { meta, closes } = await chart(`EUR${cur}=X`, '3mo');
+  const { meta, closes } = await chart(`EUR${cur}=X`, rangeFor(date));
   let v = meta.regularMarketPrice;
   if (date) {
     const before = closes.filter((c) => c.date <= date && c.close != null);
@@ -83,8 +84,8 @@ export async function quote(ticker) {
   quoteCache.set(ticker, { q, at: Date.now() });
   return q;
 }
-async function closeOn(ticker, date) {               // the close of `date`, or the first trading day after it
-  const { meta, closes } = await chart(ticker, '3mo');
+export async function closeOn(ticker, date) {        // the close of `date`, or the first trading day after it
+  const { meta, closes } = await chart(ticker, rangeFor(date));
   let c = closes.find((x) => x.date === date && x.close != null);
   if (!c && closes.some((x) => x.date === date)) {
     // Yahoo sometimes leaves a daily close empty: take the last hourly price of that day
