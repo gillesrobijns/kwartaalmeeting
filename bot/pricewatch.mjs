@@ -174,3 +174,103 @@ export function startPriceWatch({ dir, dataDir, log, holders, announce, announce
   setTimeout(() => digestTick().catch((e) => log('digest:', e.message)), 90 * 1000);
   setInterval(() => digestTick().catch((e) => log('digest:', e.message)), DIGEST_EVERY_MS);
 }
+
+// ---------- koers tool for chat Claude (8 Oct 2026) ----------
+// Claude answered "D'Ieteren is not up" while it was +3.8% that afternoon: web search had only older articles.
+// This gives him the live move from the same Yahoo source as the crash alert, before he writes anything.
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+const ALIASES = { sp500: '^GSPC', sp: '^GSPC', nasdaq: '^IXIC', bel20: '^BFX', aex: '^AEX', dax: '^GDAXI', cac40: '^FCHI',
+  eurostoxx50: '^STOXX50E', stoxx600: '^STOXX', dowjones: '^DJI', dow: '^DJI', bitcoin: 'BTC-EUR', btc: 'BTC-EUR', ethereum: 'ETH-EUR', goud: 'GC=F', gold: 'GC=F' };
+
+function nameMap(dir) {
+  const out = [];
+  try { for (const [n, t] of Object.entries(JSON.parse(readFileSync(join(dir, 'tickers.json'), 'utf8')))) if (!n.startsWith('_')) out.push([n, t]); } catch {}
+  try { for (const u of JSON.parse(readFileSync(join(dir, 'universe.json'), 'utf8'))) out.push([u.name, u.ticker]); } catch {}
+  return out;
+}
+
+async function resolveTicker(dir, query) {
+  const q = norm(query);
+  if (!q) return null;
+  if (ALIASES[q]) return ALIASES[q];
+  const names = nameMap(dir);
+  const exact = names.find(([n]) => norm(n) === q);
+  if (exact) return exact[1];
+  const tick = names.find(([, t]) => norm(t) === q || norm(t.split('.')[0]) === q);
+  if (tick) return tick[1];
+  if (q.length >= 4) {
+    const part = names.find(([n]) => norm(n).startsWith(q) || (norm(n).length >= 4 && q.startsWith(norm(n))));
+    if (part) return part[1];
+  }
+  try {                                                                 // anything else: Yahoo's own search
+    const r = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=6&newsCount=0`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+    const hits = ((await r.json())?.quotes || []).filter((x) => ['EQUITY', 'ETF', 'INDEX', 'CRYPTOCURRENCY', 'MUTUALFUND', 'FUTURE'].includes(x.quoteType));
+    if (hits[0]) return hits[0].symbol;
+  } catch {}
+  if (/^[\^A-Za-z0-9.=-]{1,12}$/.test(String(query).trim())) return String(query).trim().toUpperCase();
+  return null;
+}
+
+const nl = (x, d = 2) => x.toLocaleString('nl-BE', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sgn = (p) => `${p >= 0 ? '+' : '−'}${nl(Math.abs(p), 1)}%`;
+const CUR = { EUR: '€', USD: '$', GBP: '£', GBp: 'pence ', CHF: 'CHF ', SEK: 'SEK ', CAD: 'CAD ', JPY: '¥' };
+
+// Fresh headlines (Google News RSS, last 2 days). Web search often lags hours behind: on 8 Oct the Belron-banks
+// story (15:52) was in this feed within the hour but not in web search. Dutch/Belgian feed first, English if thin.
+function cleanName(n) {
+  return String(n || '').replace(/,?\s+(group|holding|holdings|corporation|corp\.?|incorporated|inc\.?|n\.?v\.?|s\.?a\.?|plc|ag|se|ab|asa|ltd\.?|limited|co\.?|company|the)\b\.?/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+async function newsFor(name) {
+  const items = [];
+  for (const [hl, gl, ceid] of [['nl', 'BE', 'BE:nl'], ['en-US', 'US', 'US:en']]) {
+    try {
+      const url = `https://news.google.com/rss/search?q=${encodeURIComponent(`"${name}" when:2d`)}&hl=${hl}&gl=${gl}&ceid=${ceid}`;
+      const xml = await (await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) })).text();
+      for (const it of xml.split('<item>').slice(1)) {
+        const tag = (t) => (it.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`)) || [])[1] || '';
+        const title = tag('title').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
+        const when = Date.parse(tag('pubDate'));
+        if (title && when && !items.some((x) => x.title === title)) items.push({ title, when });
+      }
+    } catch {}
+    if (items.length >= 3) break;
+  }
+  return items.sort((a, b) => b.when - a.when).slice(0, 6).map((x) =>
+    `${new Date(x.when).toLocaleString('nl-BE', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Brussels' })} · ${x.title}`);
+}
+
+// One line of facts in Dutch for the model, plus fresh headlines.
+export async function koersInfo(dir, query) {
+  const ticker = await resolveTicker(dir, query);
+  if (!ticker) return `Geen koers gevonden voor "${query}".`;
+  let res;
+  try { res = await chart(ticker, '1mo'); } catch { return `Geen koers gevonden voor "${query}" (${ticker}).`; }
+  const m = res.meta;
+  const day = await chart(ticker, '1d').then((r) => r.meta).catch(() => m);
+  const price = day.regularMarketPrice ?? m.regularMarketPrice, prev = day.chartPreviousClose;
+  if (!price) return `Geen koers gevonden voor "${query}" (${ticker}).`;
+  const off = m.gmtoffset || 0;
+  const closes = (res.timestamp || []).map((ts, i) => ({ d: new Date((ts + off) * 1000).toISOString().slice(0, 10), c: res.indicators?.quote?.[0]?.close?.[i] })).filter((b) => b.c != null);
+  const first = closes[0], fiveAgo = closes.length > 6 ? closes[closes.length - 6] : null;
+  const now = bxl(), t = new Date((day.regularMarketTime || m.regularMarketTime) * 1000), lastDay = brusselsDate(t);
+  const hhmm = t.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Brussels' });
+  const datum = t.toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Brussels' });
+  const reg = day.currentTradingPeriod?.regular, open = reg && Date.now() / 1000 >= reg.start && Date.now() / 1000 < reg.end;
+  const cur = m.instrumentType === 'INDEX' ? '' : (CUR[m.currency] ?? `${m.currency || ''} `);   // an index is in points, not euro
+  const naam = m.longName || m.shortName || query;
+  const when = lastDay !== now.date ? `De beurs is vandaag nog niet open of was dicht: laatste koers is van ${datum} ${hhmm}, en de beweging hieronder is die van ${datum}.`
+    : open ? `Beurs open, koers van vandaag ${hhmm} (Brussel), kan tot 15 minuten vertraagd zijn.`
+    : `Slotkoers van vandaag (${hhmm}).`;
+  const parts = [`${naam} (${ticker}): ${cur}${nl(price)}.`, when];
+  if (prev) parts.push(`${lastDay === now.date ? 'Vandaag' : 'Die dag'}: ${sgn((price / prev - 1) * 100)} tegenover de vorige slotkoers (${cur}${nl(prev)}).`);
+  if (day.regularMarketDayLow && day.regularMarketDayHigh) parts.push(`Dagbereik ${cur}${nl(day.regularMarketDayLow)} - ${cur}${nl(day.regularMarketDayHigh)}.`);
+  if (fiveAgo) parts.push(`5 beursdagen: ${sgn((price / fiveAgo.c - 1) * 100)}.`);
+  if (first) parts.push(`Sinds ${first.d} (ongeveer een maand): ${sgn((price / first.c - 1) * 100)}.`);
+  if (m.fiftyTwoWeekHigh) parts.push(`52 weken: ${cur}${nl(m.fiftyTwoWeekLow)} - ${cur}${nl(m.fiftyTwoWeekHigh)}.`);
+  if (m.instrumentType !== 'INDEX') {
+    const news = await newsFor(cleanName(m.shortName && m.shortName.length < (m.longName || '').length ? m.longName : (m.longName || m.shortName || query))).catch(() => []);
+    parts.push(news.length ? `\nNieuwskoppen van de laatste twee dagen (nieuwste eerst, tijd in Brussel):\n${news.join('\n')}` : '\nGeen nieuwskoppen van de laatste twee dagen gevonden.');
+  }
+  return parts.join(' ');
+}
