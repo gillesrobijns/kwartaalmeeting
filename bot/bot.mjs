@@ -113,7 +113,7 @@ const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
 
 // ---------- club data ----------
 let club = { summary: 'CLUBDATA: (nog niet geladen)', stocks: [] };
-let trader = null, autopost = null, pdfLib = null, invoer = null;                // phase 2/3 modules, loaded below (optional)
+let trader = null, autopost = null, pdfLib = null, invoer = null, kanalen = null;                // phase 2/3 modules, loaded below (optional)
 async function refreshClub() {
   try { club = await fetchClubSummary(); log(`club data loaded (${club.summary.length} chars, ${club.stocks.length} stocks)`); }
   catch (e) { log('club data refresh failed:', e.message); }
@@ -650,7 +650,7 @@ async function handlePrivate(msg) {
   const text = raw.toLowerCase();
   const from = msg.key.remoteJid;
   if (await adminCommand(from, text)) return;
-  if (text !== '/beheerder') { if (raw || hasImage(msg)) await privateChat(msg, raw); return; }
+  if (text !== '/beheerder') { if (raw || hasImage(msg) || hasDoc(msg)) await privateChat(msg, raw); return; }
   if (adminJid()) {
     await sock.sendMessage(from, { text: adminJid() === from ? '✅ Je bent al de beheerder.' : 'Er is al een beheerder.' });
     return;
@@ -678,6 +678,12 @@ async function privateChat(msg, text) {
     await sock.sendMessage(from, { text: reply }, { quoted: msg });
     remember(from, 'De aap', reply);
     return;
+  }
+  if (kanalen) {                                                   // overzicht/borderel als bestand, /formulier
+    try {
+      const files = hasDoc(msg) ? await docsOf(msg) : [];
+      if (await kanalen.handleDM({ jid: from, name, text, files })) { await sock.sendPresenceUpdate('paused', from).catch(() => {}); return; }
+    } catch (e) { log('kanalen error:', e.message); }
   }
   if (invoer) {                                                     // transactie doorgeven (screenshot of tekst)
     try {
@@ -766,7 +772,7 @@ async function askClaude(jid, asker, question, extra = '', priv = false, images 
 function textOf(msg) {
   const m = normalizeMessageContent(msg.message);
   if (!m) return '';
-  return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || '';
+  return m.conversation || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || docMsg(m)?.caption || '';
 }
 function contextOf(msg) {
   const m = normalizeMessageContent(msg.message);
@@ -848,6 +854,20 @@ async function imagesOf(msg, ctx) {
     if (!buf.length || buf.length > 5 * 1024 * 1024) return [];
     return [{ media_type: type, data: buf.toString('base64') }];
   } catch (e) { log('image download failed:', e.message); return []; }
+}
+
+// Documents (CSV, XLSX, PDF) in a private chat: broker statements and trade confirmations for kanalen.mjs.
+const docMsg = (m) => m?.documentMessage || m?.documentWithCaptionMessage?.message?.documentMessage || null;
+const hasDoc = (msg) => !!docMsg(normalizeMessageContent(msg.message));
+async function docsOf(msg) {
+  const d = docMsg(normalizeMessageContent(msg.message));
+  if (!d || Number(d.fileLength || 0) > 8 * 1024 * 1024) return [];
+  try {
+    const chunks = [];
+    for await (const c of await downloadContentFromMessage(d, 'document')) chunks.push(c);
+    const buf = Buffer.concat(chunks);
+    return buf.length ? [{ name: d.fileName || 'bestand', mime: String(d.mimetype || '').split(';')[0], data: buf }] : [];
+  } catch (e) { log('document download failed:', e.message); return []; }
 }
 
 function isForBot(text, ctx) {
@@ -1235,12 +1255,18 @@ const invoerMod = await import('./invoer.mjs').catch((e) => { log('invoer module
 if (invoerMod) {
   invoer = invoerMod.createInvoer({ anthropic, getSock: () => sock, log, dataDir: DATA_DIR, hereDir: HERE, adminJid, claudeTag: CLAUDE_TAG });
   log('invoer started');
+  const kanalenMod = await import('./kanalen.mjs').catch((e) => { log('kanalen module not loaded:', e.message); return null; });
+  if (kanalenMod) {
+    kanalen = kanalenMod.createKanalen({ invoer, getSock: () => sock, log, adminJid, claudeTag: CLAUDE_TAG, dataDir: DATA_DIR });
+    log('kanalen started');
+  }
 }
 await refreshClub();                                              // again, now with the bot portfolios
 
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 createServer(async (req, res) => {
+  if (kanalen && await kanalen.http(req, res).catch(() => false)) return;   // /api/koers for the phone form
   if (req.url.startsWith('/feed/ideas.json')) {                   // ideas and requests from members, for the roadmap backlog
     let body = '[]';
     try { body = readFileSync(IDEAS_FILE, 'utf8'); } catch {}
