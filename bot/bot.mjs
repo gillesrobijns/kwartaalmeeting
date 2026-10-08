@@ -42,6 +42,9 @@ function modelFor(feature) {
   try { const m = JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8'))[feature]; if (m) return m; } catch {}
   return CFG.model;
 }
+function cacheHistory() {                                         // models.json "cache_history": false turns the history cache off
+  try { return JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8')).cache_history !== false; } catch { return true; }
+}
 const thinkingFor = (model) => (/haiku/.test(model) ? { type: 'disabled' } : { type: 'between_tools' });   // both think by default; Haiku 5.5 refuses between_tools, and with thinking on a short max_tokens returns no text
 
 // ---------- cost per feature and model (data/usage_models.json), read with /kosten ----------
@@ -70,6 +73,14 @@ function trackUsage(feature, model, u = {}) {
   r.cache_read += u.cache_read_input_tokens || 0; r.cache_write += u.cache_creation_input_tokens || 0;
   r.searches += u.server_tool_use?.web_search_requests || 0;
   r.usd = +((r.in * p.in + r.out * p.out + r.cache_read * p.cr + r.cache_write * p.cw) / 1e6 + r.searches * SEARCH_USD).toFixed(4);
+  // The caching test: what would the same calls have cost without any cache (every input token at full price)?
+  r.usd_nocache = +(((r.in + r.cache_read + r.cache_write) * p.in + r.out * p.out) / 1e6 + r.searches * SEARCH_USD).toFixed(4);
+  if (u.cache_read_input_tokens) r.warm = (r.warm || 0) + 1; else if (u.cache_creation_input_tokens) r.cold = (r.cold || 0) + 1;
+  // Time since the previous call of this feature: <30 s = same answer (tool rounds), then <5 min, <1 h, longer.
+  const now = Date.now(), gap = r.last_at ? (now - r.last_at) / 1000 : Infinity;
+  r.gaps ||= { zelfde: 0, lt5m: 0, lt1u: 0, langer: 0 };
+  r.gaps[gap < 30 ? 'zelfde' : gap < 300 ? 'lt5m' : gap < 3600 ? 'lt1u' : 'langer'] += 1;
+  r.last_at = now;
   try { writeFileSync(USAGE_MODELS_FILE + '.tmp', JSON.stringify(all)); renameSync(USAGE_MODELS_FILE + '.tmp', USAGE_MODELS_FILE); } catch {}
 }
 { const create = anthropic.messages.create.bind(anthropic.messages);    // every call, from every module, is counted
@@ -88,10 +99,14 @@ function costReport() {
       const [f, model] = k.split('|');
       const tot = r.in + r.cache_read + r.cache_write;
       const hit = tot ? Math.round(100 * r.cache_read / tot) : 0;
-      return `• ${f} (${model.replace('claude-', '')}): ${r.calls}×, $${r.usd.toFixed(3)}, cache ${hit}%`;
+      const g = r.gaps || {};
+      const gaps = r.gaps ? ` · na <5 min ${g.lt5m}, <1 u ${g.lt1u}, langer ${g.langer}` : '';
+      return `• ${f} (${model.replace('claude-', '')}): ${r.calls}×, $${r.usd.toFixed(3)}, cache ${hit}%${gaps}`;
     });
     const sum = Object.values(all[m]).reduce((s, r) => s + r.usd, 0);
-    return `${m}: $${sum.toFixed(2)}\n${rows.join('\n')}`;
+    const nocache = Object.values(all[m]).reduce((s, r) => s + (r.usd_nocache ?? r.usd), 0);
+    const diff = nocache - sum;
+    return `${m}: $${sum.toFixed(2)} (zonder cache $${nocache.toFixed(2)}: de cache ${diff >= 0 ? `bespaarde $${diff.toFixed(2)}` : `kostte $${(-diff).toFixed(2)} extra`})\n${rows.join('\n')}`;
   }).join('\n\n');
 }
 const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
@@ -707,7 +722,7 @@ async function askClaude(jid, asker, question, extra = '', priv = false, images 
     (priv ? `Dit is een PRIVÉGESPREK met ${asker}, niet de groep. Eerdere berichten in dit gesprek (oudste eerst):`
           : 'Recente berichten in de groep (oudste eerst):');
   const histBlocks = [{ type: 'text', text: head }, ...(h.length ? h.map((m) => ({ type: 'text', text: `${m.name}: ${m.text}` })) : [{ type: 'text', text: '(geen)' }])];
-  histBlocks[histBlocks.length - 1].cache_control = { type: 'ephemeral' };
+  if (cacheHistory()) histBlocks[histBlocks.length - 1].cache_control = { type: 'ephemeral' };
   const tail = priv
     ? `${imgNote}${asker} schrijft je nu: "${question}"\n\n${extra}${PRIVATE_NOTE}Schrijf alleen je antwoord aan ${asker}.`
     : `${imgNote}${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`;
@@ -1128,6 +1143,13 @@ await refreshClub();                                              // again, now 
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 createServer(async (req, res) => {
+  if (req.url.startsWith('/feed/costs.json')) {                   // API cost per feature and model, read by the laptop for the cost slide
+    let body = '{}';
+    try { body = readFileSync(USAGE_MODELS_FILE, 'utf8'); } catch {}
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(body);
+    return;
+  }
   if (req.url.startsWith('/feed/ledger.json')) {                  // read by the laptop (bot_bridge.py); virtual money only
     res.writeHead(trader ? 200 : 404, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
     res.end(trader ? JSON.stringify(trader.publicLedger()) : '{}');
