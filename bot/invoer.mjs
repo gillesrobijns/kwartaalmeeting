@@ -52,6 +52,8 @@ const TOOL = {
             totaal_eur: { type: ['number', 'null'], description: 'Buy: totaal dat van de rekening ging, kosten en taksen inbegrepen. Sell: totaal dat op de rekening kwam, na kosten en taksen. Dividend: netto ontvangen bedrag. Alleen in euro; null als je het bedrag niet in euro ziet.' },
             munt_gezien: { type: 'string', description: 'De munt van het totaal zoals je het ziet, bv. EUR of USD.' },
             datum: { type: ['string', 'null'], description: 'Uitvoerings- of betaaldatum als YYYY-MM-DD. Ontbreekt het jaar: het jongste jaar dat niet in de toekomst ligt. null als er geen datum is.' },
+            kandidaten: { type: 'array', items: { type: 'string' }, description: 'Alleen bij twijfel: tot 3 namen uit de AANDELENLIJST die kunnen passen. Leeg als het zeker één naam is.' },
+            isin: { type: ['string', 'null'], description: 'De ISIN (2 letters + 10 tekens) als die op de afbeelding of in het bericht staat, anders null.' },
           },
           required: ['type', 'aandeel', 'in_lijst', 'aantal', 'totaal_eur', 'munt_gezien', 'datum'],
         },
@@ -73,6 +75,7 @@ const RULES = `Je leest transacties uit berichten van leden van een beleggingscl
   `- Staat het totaal alleen in een andere munt (bv. dollar), zet totaal_eur op null en munt_gezien op die munt. Reken zelf NIET om.\n` +
   `- Staat er geen totaal maar wel aantal en koers in euro, reken dan aantal x koers uit en meld in "onduidelijk" dat de kosten er niet in zitten.\n` +
   `- Gebruik voor "aandeel" de naam uit de AANDELENLIJST hieronder als het hetzelfde bedrijf of fonds is (bv. "ASML Holding NV" wordt "ASML").\n` +
+  `- Twijfel je tussen meerdere namen uit de AANDELENLIJST (fondsen met een gelijkaardige naam, aandelenklassen, een naam die maar half overeenkomt), zet ze dan in "kandidaten" en kies niet zelf. Is het zeker één naam, laat "kandidaten" leeg.\n` +
   `- Verzin niets. Wat je niet ziet, is null, en je zet een vraag in "onduidelijk".\n` +
   `- Een portefeuilleoverzicht (posities en waarde) is GEEN transactie.\n` +
   `- Komt er een vorige versie en een correctie van het lid mee, pas dan de vorige versie aan volgens de correctie. Wat het lid zegt, gaat voor op de afbeelding.\n` +
@@ -164,6 +167,144 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   }
   const needsStrong = (r) => !r || r.zekerheid < 0.8 || (r.rijen || []).some((x) => !x.in_lijst);
 
+  // ---------- controles vóór het voorstel ----------
+  const UP = (x) => String(x || '').trim().toUpperCase();
+  const ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b/;
+  const FLAGS = ['keuze_ok', 'dup_ok', 'prijs_ok', 'bezit_ok', 'force', 'nieuw'];
+  const dayDiff = (a, b) => Math.abs((new Date(`${a}T12:00:00Z`) - new Date(`${b}T12:00:00Z`)) / 864e5);
+  const GENERIC = new Set(['ISHARES', 'AMUNDI', 'XTRACKERS', 'VANGUARD', 'SPDR', 'LYXOR', 'INVESCO', 'WISDOMTREE', 'VANECK', 'FRANKLIN', 'MSCI', 'FTSE', 'ETF', 'UCITS', 'ACC', 'DIST', 'GLOBAL', 'WORLD', 'INDEX', 'FUND', 'CORP', 'INC', 'GROUP', 'HOLDING', 'HOLDINGS', 'THE', 'AND', 'CLASS']);
+  const toks = (x) => UP(x).replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
+
+  function normalize(r) {                                          // namen gelijkzetten met de lijst, in_lijst door de code laten bepalen
+    const byUp = new Map(stockList().map((n) => [UP(n), n]));
+    for (const x of r.rijen || []) {
+      const hit = byUp.get(UP(x.aandeel));
+      if (hit) { x.aandeel = hit; x.in_lijst = true; } else if (!x.nieuw) x.in_lijst = false;
+      if (x.isin) { const m = UP(x.isin).replace(/\s/g, '').match(ISIN_RE); x.isin = m ? m[1] : null; }
+    }
+  }
+  function candidates(x) {
+    const list = stockList();
+    const byUp = new Map(list.map((n) => [UP(n), n]));
+    let c = (x.kandidaten || []).map((k) => byUp.get(UP(k))).filter(Boolean);
+    if (!c.length && !x.in_lijst) {
+      const mine = toks(x.aandeel);
+      c = list.map((n) => { const t = toks(n); let sc = 0; for (const w of mine) if (t.includes(w)) sc += GENERIC.has(w) ? 0.5 : 2; return [n, sc]; })
+        .filter((v) => v[1] >= 2).sort((a, b) => b[1] - a[1]).map((v) => v[0]);
+    }
+    if (x.in_lijst) c = [x.aandeel, ...c.filter((n) => n !== x.aandeel)];
+    return [...new Set(c)].slice(0, 3);
+  }
+  async function sheetRows(member) {                               // alleen lezen, via de webapp
+    const url = config().webapp_url;
+    if (!url) return null;
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'text/plain' }, redirect: 'follow',
+        body: JSON.stringify({ token: token(), action: 'lookup', member }) });
+      const out = JSON.parse(await res.text());
+      if (out.ok && Array.isArray(out.tx)) return out;
+      log('invoer lookup:', out.error || 'geen rijen');
+    } catch (e) { log('invoer lookup:', e.message); }
+    return null;
+  }
+  async function refPrice(stock, date) {                           // slotkoers in euro op die dag (of de eerste beursdag erna)
+    try {
+      const t = JSON.parse(readFileSync(join(hereDir, 'tickers.json'), 'utf8'))[stock];
+      if (!t) return null;
+      const { closeOn, quote } = await import('./trader.mjs');
+      const d = date > today() ? today() : date;
+      const c = await closeOn(t, d).catch(() => null);
+      if (c?.price_eur) return { price_eur: c.price_eur, date: c.date };
+      if (dayDiff(d, today()) <= 3) { const q = await quote(t); if (q?.price_eur) return { price_eur: q.price_eur, date: today() }; }
+    } catch (e) { log('invoer koers:', stock, e.message); }
+    return null;
+  }
+  const rowTag = (r, i) => (r.rijen.length > 1 ? ` (rij ${i + 1})` : '');
+  const sheetLine = (h, isDiv) => (isDiv
+    ? `Dividend · ${h.stock} · ${h.amount > 0 ? eur(h.amount) : '?'} · ${dmy(h.date)}`
+    : `${TYPE_NL[h.type] || h.type} · ${num(h.qty)} × ${h.stock} · ${h.total > 0 ? eur(h.total) : '?'} · ${dmy(h.date)}`);
+
+  // Zet p.stage en geeft het bericht terug. Volgorde: welk aandeel → wat ontbreekt → dubbel → prijs → bezit → voorstel.
+  async function advance(jid, p) {
+    const r = p.r;
+    normalize(r);
+    // welk aandeel en de ISIN vraagt de code zelf; dezelfde vraag van het model niet nog eens stellen
+    r.onduidelijk = (r.onduidelijk || []).filter((q) => !/(lijst|welk(e)? (aandeel|fonds)|bedoel je (een|het|de)|nieuw (aandeel|fonds)|ISIN)/i.test(q));
+    for (const [i, x] of r.rijen.entries()) {
+      if (x.keuze_ok) continue;
+      const opts = candidates(x);
+      if (x.in_lijst && opts.length < 2) { x.keuze_ok = true; continue; }
+      p.idx = i;
+      if (opts.length) {
+        p.stage = 'keuze'; p.opts = opts;
+        const fund = opts.some((n) => /ISHARES|AMUNDI|XTRACKERS|VANGUARD|SPDR|ETF|MSCI|FTSE|INVESCO|WISDOMTREE|VANECK/.test(n));
+        return `Welk ${fund ? 'fonds' : 'aandeel'} bedoel je${rowTag(r, i)}?${x.in_lijst ? '' : ` (op je ${images.get(jid) ? 'screenshot' : 'bericht'}: ${x.aandeel})`}\n` +
+          opts.map((n, k) => `${k + 1}. ${n}`).join('\n') + `\n${opts.length + 1}. Een nieuw ${fund ? 'fonds' : 'aandeel'} voor de club\n\nAntwoord met het nummer.`;
+      }
+      p.stage = 'isin';
+      return x.isin
+        ? `${x.aandeel}${rowTag(r, i)} staat nog niet in de lijst van de club. Is het een nieuw aandeel (ISIN ${x.isin})? Antwoord *nieuw*, of zeg welk aandeel uit de lijst je bedoelt.`
+        : `${x.aandeel}${rowTag(r, i)} staat nog niet in de lijst van de club. Is het nieuw, stuur dan de ISIN (12 tekens, staat bij de details in je broker-app), dan kan de maandagscan de koers vinden. Bedoel je een aandeel uit de lijst, zeg dan welk.`;
+    }
+    if (problems(r).length) { p.stage = 'voorstel'; return proposal(p.member, r); }   // eerst aanvullen, dan controleren
+
+    if (p.sheet === undefined) p.sheet = (await sheetRows(p.member)) || false;
+    const sh = p.sheet;
+    if (sh) for (const [i, x] of r.rijen.entries()) {
+      if (x.dup_ok) continue;
+      const isDiv = x.type === 'Dividend';
+      const hit = isDiv
+        ? (sh.div || []).find((d) => UP(d.stock) === UP(x.aandeel) && d.date && dayDiff(d.date, x.datum) <= 5)
+        : sh.tx.find((t) => UP(t.stock) === UP(x.aandeel) && t.type === x.type && Math.abs(t.qty - x.aantal) < 1e-6 && t.date && dayDiff(t.date, x.datum) <= 5);
+      if (!hit) { x.dup_ok = true; continue; }
+      p.stage = 'dubbel'; p.idx = i;
+      return `Dit lijkt al in je sheet te staan${rowTag(r, i)}:\n*${sheetLine(hit, isDiv)}*\n\n` +
+        `${hit.date !== x.datum ? `Jij gaf ${dmy(x.datum)} door. ` : ''}Is dat dezelfde ${isDiv ? 'uitbetaling' : TYPE_NL[x.type].toLowerCase()}?\n*zelfde* = niets doen · *nieuw* = toch ingeven`;
+    }
+    for (const [i, x] of r.rijen.entries()) {
+      if (x.prijs_ok || x.type === 'Dividend' || !x.in_lijst) { x.prijs_ok = true; continue; }
+      const ref = await refPrice(x.aandeel, x.datum);
+      const per = x.totaal_eur / x.aantal;
+      if (!ref || (per / ref.price_eur <= 1.25 && per / ref.price_eur >= 0.75)) { x.prijs_ok = true; continue; }
+      p.stage = 'prijs'; p.idx = i;
+      const k = Math.round(Math.log10((ref.price_eur * x.aantal) / x.totaal_eur));
+      const guess = k !== 0 && Math.abs((x.totaal_eur * 10 ** k) / (ref.price_eur * x.aantal) - 1) < 0.25 ? x.totaal_eur * 10 ** k : null;
+      return `Dat is ${eur(per)} per aandeel${rowTag(r, i)}. ${x.aandeel} stond ${ref.date === today() ? 'vandaag' : `op ${dmy(ref.date)}`} rond ${eur(ref.price_eur)}.\n` +
+        (guess ? `Bedoel je *${eur(guess)}*? ` : 'Klopt het aantal en het totaal? ') +
+        `Zeg het juiste totaal (of aantal) van je uittreksel, of *ja* als ${eur(x.totaal_eur)} toch klopt.`;
+    }
+    if (sh) for (const [i, x] of r.rijen.entries()) {
+      if (x.bezit_ok || x.type !== 'Sell') { x.bezit_ok = true; continue; }
+      let held = 0;
+      for (const t of sh.tx) if (UP(t.stock) === UP(x.aandeel)) held += t.type === 'Buy' ? t.qty : t.type === 'Sell' ? -t.qty : 0;
+      for (const y of r.rijen.slice(0, i)) if (UP(y.aandeel) === UP(x.aandeel)) held += y.type === 'Buy' ? y.aantal : y.type === 'Sell' ? -y.aantal : 0;
+      if (x.aantal <= held + 1e-6) { x.bezit_ok = true; continue; }
+      p.stage = 'bezit'; p.idx = i;
+      return `Volgens je sheet heb je ${held > 1e-6 ? `*${num(held)} ${x.aandeel}*` : `geen ${x.aandeel}`}, dus ${num(x.aantal)} verkopen kan niet${rowTag(r, i)}.\n` +
+        `Klopt het aantal, of ontbreekt er nog een aankoop in je sheet? Zeg het juiste aantal, of *ja* als het toch klopt.`;
+    }
+    p.stage = 'voorstel';
+    return proposal(p.member, r);
+  }
+  async function step(jid, p, prefix = '') {
+    await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
+    const msg = await advance(jid, p);
+    p.at = Date.now();
+    state.pending[jid] = p;
+    saveState();
+    await send(jid, prefix + msg);
+  }
+  const carry = (oldR, newR) => {                                  // beslissingen van het lid bewaren na een correctie
+    for (const [i, y] of (newR.rijen || []).entries()) {
+      const x = oldR?.rijen?.[i];
+      if (!x || UP(x.aandeel) !== UP(y.aandeel) || x.type !== y.type) continue;
+      for (const f of ['keuze_ok', 'nieuw', 'isin']) if (x[f] && !y[f]) y[f] = x[f];
+      if (x.aantal === y.aantal && x.totaal_eur === y.totaal_eur && x.datum === y.datum) for (const f of ['dup_ok', 'force', 'prijs_ok', 'bezit_ok']) if (x[f]) y[f] = x[f];
+    }
+    return newR;
+  };
+  const clean = (r) => ({ ...r, rijen: (r.rijen || []).map((x) => Object.fromEntries(Object.entries(x).filter(([k]) => !FLAGS.includes(k)))) });
+
   async function readSmart(args, jid, forceStrong = false) {
     let r = null;
     if (!forceStrong) {
@@ -185,7 +326,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       const what = x.type === 'Dividend'
         ? `${TYPE_NL[x.type]} · ${x.aandeel} · ${x.totaal_eur > 0 ? eur(x.totaal_eur) : '?'} · ${dmy(x.datum)}`
         : `${TYPE_NL[x.type]} · ${x.aantal > 0 ? num(x.aantal) : '?'} × ${x.aandeel} · ${x.totaal_eur > 0 ? eur(x.totaal_eur) : '?'} · ${dmy(x.datum)}`;
-      return `${r.rijen.length > 1 ? `${i + 1}. ` : ''}${what}${x.in_lijst ? '' : ' (nieuw aandeel voor de club)'}`;
+      return `${r.rijen.length > 1 ? `${i + 1}. ` : ''}${what}${x.in_lijst ? '' : ` (nieuw voor de club${x.isin ? `, ISIN ${x.isin}` : ''})`}`;
     });
     const pr = problems(r);
     const ask = pr.length ? pr : (r.onduidelijk || []).slice(0, 3);
@@ -243,11 +384,53 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       const saved = pending.saved;
       delete state.pending[jid];
       if (saved?.r) {
-        state.pending[jid] = { stage: 'voorstel', member: pick, r: saved.r, at: Date.now(), tries: 0 };
-        saveState();
-        await send(jid, `Dag ${pick}, genoteerd.\n\n${proposal(pick, saved.r)}`);
+        await step(jid, { member: pick, r: saved.r, tries: 0 }, `Dag ${pick}, genoteerd.\n\n`);
       } else { saveState(); await send(jid, `Dag ${pick}, genoteerd.`); }
       return true;
+    }
+
+    // Een controlevraag staat open
+    if (['keuze', 'isin', 'dubbel', 'prijs', 'bezit'].includes(pending?.stage)) {
+      if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); return true; }
+      const x = pending.r.rijen[pending.idx];
+      if (!x) { delete state.pending[jid]; saveState(); return false; }
+      if (pending.stage === 'keuze') {
+        const n = (raw.match(/^\s*(\d)\b/) || [])[1];
+        const byName = pending.opts.find((o) => UP(raw) === UP(o) || (UP(raw).length >= 4 && UP(o).includes(UP(raw))));
+        if ((n && +n === pending.opts.length + 1) || /\bnieuw/i.test(raw)) {
+          if (x.isin) { x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
+          pending.stage = 'isin'; pending.at = Date.now(); saveState();
+          await send(jid, 'Nieuw voor de club. Stuur de ISIN (12 tekens, staat bij de details in je broker-app), dan kan de maandagscan de koers vinden.');
+          return true;
+        }
+        const pick = n && +n >= 1 && +n <= pending.opts.length ? pending.opts[+n - 1] : byName;
+        if (pick) { x.aandeel = pick; x.in_lijst = true; x.keuze_ok = true; delete x.kandidaten; await step(jid, pending); return true; }
+        return correct(jid, pending, raw);
+      }
+      if (pending.stage === 'isin') {
+        const m = UP(raw).replace(/[\s.-]/g, '').match(/([A-Z]{2}[A-Z0-9]{9}[0-9])/);
+        const byUp = new Map(stockList().map((s) => [UP(s), s]));
+        if (m) { x.isin = m[1]; x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
+        if (x.isin && (YES.test(raw) || /\bnieuw/i.test(raw))) { x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
+        if (byUp.has(UP(raw))) { x.aandeel = byUp.get(UP(raw)); x.in_lijst = true; x.keuze_ok = true; await step(jid, pending); return true; }
+        if (raw.split(/\s+/).length <= 3 && !/\d/.test(raw)) {
+          await send(jid, 'Dat is geen ISIN. Een ISIN heeft 12 tekens: 2 letters en dan 10 cijfers of letters, bv. IE00BMC38736. Stuur de ISIN, zeg welk aandeel uit de lijst je bedoelt, of *stop*.');
+          return true;
+        }
+        return correct(jid, pending, raw);
+      }
+      if (pending.stage === 'dubbel') {
+        if (/\b(zelfde|dezelfde|hetzelfde|al ingevuld|staat er al|al ingegeven)\b/i.test(raw)) {
+          pending.r.rijen.splice(pending.idx, 1);
+          if (!pending.r.rijen.length) { delete state.pending[jid]; saveState(); await send(jid, '👍 Dan doe ik niets. Geen dubbele rij.'); return true; }
+          await step(jid, pending, 'Oké, die laat ik weg.\n\n'); return true;
+        }
+        if (/\b(nieuw|nieuwe|andere|tweede|toch)\b/i.test(raw)) { x.dup_ok = true; x.force = true; await step(jid, pending); return true; }
+        if (YES.test(raw)) { await send(jid, 'Antwoord *zelfde* (dan doe ik niets) of *nieuw* (dan geef ik het toch in).'); return true; }
+        return correct(jid, pending, raw);
+      }
+      if (YES.test(raw) || /^\s*(klopt( toch)?|toch juist|het klopt)[\s!.]*$/i.test(raw)) { x[pending.stage === 'prijs' ? 'prijs_ok' : 'bezit_ok'] = true; await step(jid, pending); return true; }
+      return correct(jid, pending, raw);
     }
 
     // Een voorstel staat open: ja / stop / correctie
@@ -255,7 +438,8 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); return true; }
       if (YES.test(raw)) {
         if (problems(pending.r).length) { await send(jid, `Er ontbreekt nog iets:\n${problems(pending.r).map((q) => `• ${q}`).join('\n')}`); return true; }
-        const rows = pending.r.rijen.map((x) => ({ type: x.type, stock: x.aandeel, shares: x.type === 'Dividend' ? null : x.aantal, total_eur: x.totaal_eur, date: x.datum }));
+        const rows = pending.r.rijen.map((x) => ({ type: x.type, stock: x.aandeel, shares: x.type === 'Dividend' ? null : x.aantal, total_eur: x.totaal_eur, date: x.datum,
+          ...(x.force ? { force: true } : {}), ...(x.nieuw && x.isin ? { isin: x.isin } : {}) }));
         delete state.pending[jid]; saveState();
         try {
           const out = await write(jid, pending.member, rows);
@@ -268,6 +452,8 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
             await send(jid, t || 'Niets ingegeven.');
             const a = adminJid();
             if (a && a !== jid && done) getSock().sendMessage(a, { text: claudeTag + `📥 ${pending.member} gaf ${done} transactie${done > 1 ? 's' : ''} door via WhatsApp: ${[...new Set(rows.map((x) => x.stock))].join(', ')}` }).catch(() => {});
+            const fresh = rows.filter((x) => x.isin);
+            if (a && done && fresh.length) getSock().sendMessage(a, { text: claudeTag + `🆕 ${pending.member} gaf een nieuw aandeel door: ${fresh.map((x) => `${x.stock} (ISIN ${x.isin})`).join(', ')}. Staat nog niet in de lijst; de maandagscan vraagt de classificatie.` }).catch(() => {});
           }
         } catch (e) {
           log('invoer write:', e.message);
@@ -277,16 +463,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
         }
         return true;
       }
-      // Correctie of aanvulling
-      if (!budgetOk(jid)) { await send(jid, 'Genoeg gelezen voor vandaag. Morgen weer, of zet het zelf in je sheet.'); return true; }
-      await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
-      const r = await readSmart({ member: pending.member, imgs: images.get(jid)?.images || [], previous: pending.r, correction: raw }, jid, (pending.tries || 0) >= 1);
-      saveState();
-      if (!r || !r.rijen?.length) { await send(jid, 'Dat begrijp ik niet goed. Zeg wat er anders moet, of *stop*.'); return true; }
-      state.pending[jid] = { ...pending, r, at: Date.now(), tries: (pending.tries || 0) + 1 };
-      saveState();
-      await send(jid, proposal(pending.member, r));
-      return true;
+      return correct(jid, pending, raw);                            // correctie of aanvulling
     }
 
     // Nieuw bericht: is het een transactie?
@@ -306,9 +483,17 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       await send(jid, `Ik zie een transactie, maar ik ken je nummer nog niet. Wie ben je? Antwoord met je voornaam: ${MEMBERS.join(', ')}.`);
       return true;
     }
-    state.pending[jid] = { stage: 'voorstel', member, r, at: Date.now(), tries: 0 };
+    await step(jid, { member, r, tries: 0 });
+    return true;
+  }
+
+  async function correct(jid, pending, raw) {
+    if (!budgetOk(jid)) { await send(jid, 'Genoeg gelezen voor vandaag. Morgen weer, of zet het zelf in je sheet.'); return true; }
+    await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
+    const r = await readSmart({ member: pending.member, imgs: images.get(jid)?.images || [], previous: clean(pending.r), correction: raw }, jid, (pending.tries || 0) >= 1);
     saveState();
-    await send(jid, proposal(member, r));
+    if (!r || !r.rijen?.length) { await send(jid, 'Dat begrijp ik niet goed. Zeg wat er anders moet, of *stop*.'); return true; }
+    await step(jid, { member: pending.member, r: carry(pending.r, r), tries: (pending.tries || 0) + 1, sheet: pending.sheet });
     return true;
   }
 
@@ -326,5 +511,5 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       `\nWebapp: ${config().webapp_url ? 'ingesteld' : 'nog niet ingesteld'}`;
   }
 
-  return { handle, report, _internals: { read, problems, proposal, readSmart, needsStrong } };
+  return { handle, report, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state } };
 }
