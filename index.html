@@ -3537,7 +3537,8 @@ function computeBolletjesPoints(qd) {
   const stocks = (qd.individual_stocks || []).slice().sort((a,b) => b.return_pct - a.return_pct);
   const pts = {};
   stocks.forEach((s, i) => {
-    const p = POINTS_TABLE[i+1] || 0;
+    // Original rule: top 7 stocks score, plus 5 for every stock above +15% this quarter
+    const p = (POINTS_TABLE[i+1] || 0) + ((s.return_pct || 0) > 0.15 ? 5 : 0);
     if (p > 0) pts[s.member] = (pts[s.member]||0) + p;
   });
   return pts;
