@@ -5445,15 +5445,18 @@ function renderRoadmap() {
     return;
   }
 
-  // Newest released item gets the "Nieuw" badge
+  // "Nieuw" = not seen at the previous meeting: every released item of the latest release quarter
   const released = _rmSortItems(items.filter(i => i.status === 'released'), 'released');
-  const newestId = released.length ? (released[0].id || released[0].title) : null;
+  const _since = (rm.meta || {}).newSince;
+  const _maxQ = released.reduce((m, i) => Math.max(m, _rmQSort(i.quarter)), 0);
+  let newIds = new Set(released.filter(i => _since ? String(i.date || '') >= _since : _rmQSort(i.quarter) === _maxQ).map(i => i.id || i.title));
+  if (!newIds.size && released.length) newIds = new Set([released[0].id || released[0].title]);
 
   board.innerHTML = columns.map(col => {
     const accent = col.accent || '#1B2A4A';
     const colItems = _rmSortItems(items.filter(i => i.status === col.id), col.id);
     const cards = colItems.length
-      ? colItems.map(i => _rmCard(i, col, (i.id || i.title) === newestId && i.status === 'released')).join('')
+      ? colItems.map(i => _rmCard(i, col, newIds.has(i.id || i.title) && i.status === 'released')).join('')
       : '<div class="rm-col-empty">' + _rmEsc(col.empty || 'Niets in deze kolom') + '</div>';
 
     return '<div class="rm-col" style="--rm-accent:' + accent
