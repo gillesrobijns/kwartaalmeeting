@@ -98,7 +98,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   const save = (f, obj) => { writeFileSync(`${f}.tmp`, JSON.stringify(obj, null, 1)); renameSync(`${f}.tmp`, f); };
   let state = load(STATE_FILE, {});
   state.members ||= {}; state.pending ||= {}; state.day ||= {};
-  state.last ||= {}; state.posbuf ||= {}; state.nudged ||= {}; state.optout ||= {}; state.snap ||= {}; state.scan ||= {};
+  state.last ||= {}; state.posbuf ||= {}; state.nudged ||= {}; state.divq ||= {}; state.optout ||= {}; state.snap ||= {}; state.scan ||= {};
   const saveState = () => save(STATE_FILE, state);
   const images = new Map();                                       // jid -> { images, at } (alleen in het geheugen)
 
@@ -431,34 +431,63 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     return out;
   }
   const addDays = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
-  async function dividendNudges() {
+  // Dividend: één felicitatie op de (geschatte) betaaldag, en één herinnering per kwartaal (de 21e van de laatste maand)
+  // voor wat nog geen bedrag kreeg. Geen antwoord = geen nieuwe vragen tussendoor.
+  const DIV_START = '2026-10-08';                                  // felicitaties alleen voor dividenden vanaf de start van deze functie
+  const payDay = (ticker, ex) => addDays(ex, /\.[A-Z]{1,3}$/.test(ticker) ? 3 : 21);   // Europese beurs ± 3 dagen na ex, VS ± 3 weken
+  async function divCandidates(member, sh, tickers, from, to) {    // dividenden met ex-datum in [from, to] die het lid toen had en die nog niet in de sheet staan
+    const byUp = new Map(Object.keys(tickers).map((n) => [UP(n), n]));
+    const out = [];
+    for (const stock of [...new Set(sh.tx.map((t) => byUp.get(UP(t.stock))).filter(Boolean))]) {
+      for (const ev of await dividendsOf(tickers[stock])) {
+        if (ev.ex < from || ev.ex > to) continue;
+        const had = holdings(sh, ev.ex)[UP(stock)] || 0;
+        if (!(had > 1e-6) || had * ev.amount < 1) continue;        // geen positie, of minder dan ± 1 euro bruto: niet storen
+        if ((sh.div || []).some((d) => UP(d.stock) === UP(stock) && d.date && d.date >= addDays(ev.ex, -7) && d.date <= addDays(ev.ex, 75))) continue;
+        out.push({ stock, ex: ev.ex, key: `${member}|${stock}|${ev.ex}`, pay: payDay(tickers[stock], ev.ex) });
+      }
+    }
+    return out.sort((a, b) => a.ex.localeCompare(b.ex));
+  }
+  async function askDividend(jid, member, d, intro) {
+    state.nudged[d.key] = state.nudged[d.key] === 'herinnerd' ? 'herinnerd' : 'gevraagd';
+    state.pending[jid] = { stage: 'dividend', member, stock: d.stock, ex: d.ex, key: d.key, at: Date.now() };
+    saveState();
+    await send(jid, `${intro}\nHoeveel kwam er netto binnen (na roerende voorheffing)? Of zeg *nee* als je het al ingaf of geen dividend kreeg.`).catch((e) => log('invoer dividend:', e.message));
+  }
+  async function nextDividend(jid, member) {                       // na een antwoord: de volgende uit de herinnering van het kwartaal
+    const q = state.divq[jid] || [];
+    const d = q.shift();
+    state.divq[jid] = q; saveState();
+    if (!d) return false;
+    await askDividend(jid, member, d, `Nog een: *${d.stock}* (ex-dividenddatum ${dmy(d.ex)}).`);
+    return true;
+  }
+  async function dividendJob(t0 = today(), divStart = DIV_START) {   // parameters alleen voor tests
     let tickers = {};
     try { tickers = JSON.parse(readFileSync(join(hereDir, 'tickers.json'), 'utf8')); } catch { return; }
-    const byUp = new Map(Object.keys(tickers).map((n) => [UP(n), n]));
-    const t0 = today();
+    const [y, m, dd] = t0.split('-').map(Number);
+    const reminderDay = m % 3 === 0 && dd === 21;                  // 21 maart, juni, september, december
+    const qStart = `${y}-${String(m - ((m - 1) % 3)).padStart(2, '0')}-01`;
     for (const [jid, member] of recipients()) {
       if (state.optout[member] || state.pending[jid]) continue;
       const sh = await sheetRows(member);
       if (!sh) continue;
-      const stocks = [...new Set(sh.tx.map((t) => byUp.get(UP(t.stock))).filter(Boolean))];
-      let sent = false;
-      for (const stock of stocks) {
-        if (sent) break;
-        for (const ev of await dividendsOf(tickers[stock])) {
-          if (ev.ex < addDays(t0, -45) || ev.ex > addDays(t0, -14)) continue;   // betaling is dan meestal binnen
-          const key = `${member}|${stock}|${ev.ex}`;
-          if (state.nudged[key]) continue;
-          const had = holdings(sh, ev.ex)[UP(stock)] || 0;
-          if (!(had > 1e-6) || had * ev.amount < 1) continue;           // geen positie, of minder dan ± 1 euro bruto: niet storen
-          if ((sh.div || []).some((d) => UP(d.stock) === UP(stock) && d.date && d.date >= addDays(ev.ex, -7) && d.date <= addDays(ev.ex, 75))) { state.nudged[key] = 'al in sheet'; continue; }
-          state.nudged[key] = new Date().toISOString();
-          state.pending[jid] = { stage: 'dividend', member, stock, ex: ev.ex, at: Date.now() };
-          saveState();
-          await send(jid, `💶 ${stock} keerde dividend uit (ex-dividenddatum ${dmy(ev.ex)}). Volgens je sheet had je ze toen.\nHoeveel kwam er netto binnen (na roerende voorheffing)? Of zeg *nee* als je het al ingaf of geen dividend kreeg.`).catch((e) => log('invoer nudge:', e.message));
-          sent = true;
-          break;
-        }
+      if (reminderDay) {
+        const open = (await divCandidates(member, sh, tickers, qStart, t0)).filter((d) => d.pay <= t0 && !['beantwoord', 'nee', 'herinnerd'].includes(state.nudged[d.key]));
+        if (!open.length) continue;
+        open.forEach((d) => { state.nudged[d.key] = 'herinnerd'; });
+        const first = open.shift();
+        state.divq[jid] = open;
+        const all = [first, ...open].map((d) => d.stock);
+        await askDividend(jid, member, first, `📅 Het kwartaal loopt bijna af. Van ${all.length === 1 ? 'dit dividend' : `deze ${all.length} dividenden`} heb ik nog geen bedrag: ${andList(all.map((n) => `*${n}*`))}.\n\nEerst *${first.stock}* (ex-dividenddatum ${dmy(first.ex)}).`);
+        continue;
       }
+      const due = (await divCandidates(member, sh, tickers, addDays(t0, -40), t0))
+        .filter((d) => d.ex >= divStart && d.pay <= t0 && d.pay >= addDays(t0, -7) && !state.nudged[d.key]);
+      if (!due.length) continue;
+      const d = due[0];                                            // hoogstens één felicitatie per dag
+      await askDividend(jid, member, d, `🎉 Proficiat, *${d.stock}* keerde dividend uit (ex-dividenddatum ${dmy(d.ex)}).`);
     }
     saveState();
   }
@@ -502,7 +531,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
         }
       } catch (e) { log('invoer feed:', e.message); }
       if (state.scan.due && hour >= 8 && hour < 22) { state.scan.due = false; saveState(); await scanReceipts(); }
-      if (hour === 10 && state.scan.divday !== day) { state.scan.divday = day; saveState(); await dividendNudges(); }
+      if (hour === 10 && state.scan.divday !== day) { state.scan.divday = day; saveState(); await dividendJob(); }
     } catch (e) { log('invoer tick:', e.message); }
     busy = false;
   }
@@ -607,20 +636,26 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     // Antwoord op een dividend-seintje
     if (pending?.stage === 'dividend') {
       if (/(geen seintjes|niet meer vragen|nooit meer|stop met (de )?seintjes)/i.test(raw)) {
-        state.optout[pending.member] = true; delete state.pending[jid]; saveState();
+        state.optout[pending.member] = true; state.divq[jid] = []; delete state.pending[jid]; saveState();
         await send(jid, 'Oké, ik stuur je geen dividend-seintjes meer.'); return true;
       }
-      if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, genoteerd.'); return true; }
+      if (NO.test(raw)) {
+        if (pending.key) state.nudged[pending.key] = 'nee';
+        delete state.pending[jid]; saveState();
+        if (!(await nextDividend(jid, pending.member))) await send(jid, 'Oké, genoteerd.');
+        return true;
+      }
       const m = raw.match(/(\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
       if (m && raw.length < 60) {
         const v = m[1].includes(',') ? +m[1].replace(/[.\s]/g, '').replace(',', '.') : +m[1].replace(/\s/g, '');
         if (v > 0) {
+          if (pending.key) state.nudged[pending.key] = 'beantwoord';
           const r = { is_transactie: true, zekerheid: 1, onduidelijk: [], rijen: [{ type: 'Dividend', aandeel: pending.stock, in_lijst: true, keuze_ok: true, aantal: null, totaal_eur: v, munt_gezien: 'EUR', datum: pending.ex }] };
           await step(jid, { member: pending.member, r, tries: 0 });
           return true;
         }
       }
-      delete state.pending[jid]; saveState();                       // iets anders: gewoon gesprek
+      delete state.pending[jid]; state.divq[jid] = []; saveState();   // iets anders: gewoon gesprek, geen verdere vragen
       return false;
     }
 
@@ -670,7 +705,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
 
     // Een voorstel staat open: ja / stop / correctie
     if (pending?.stage === 'voorstel') {
-      if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); return true; }
+      if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); await nextDividend(jid, pending.member); return true; }
       if (YES.test(raw)) {
         if (problems(pending.r).length) { await send(jid, `Er ontbreekt nog iets:\n${problems(pending.r).map((q) => `• ${q}`).join('\n')}`); return true; }
         const rows = pending.r.rijen.map((x) => ({ type: x.type, stock: x.aandeel, shares: x.type === 'Dividend' ? null : x.aantal, total_eur: x.totaal_eur, date: x.datum,
@@ -698,6 +733,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
           const a = adminJid();
           if (a) getSock().sendMessage(a, { text: claudeTag + `⚠️ Invoer voor ${pending.member} mislukt: ${e.message}` }).catch(() => {});
         }
+        await nextDividend(jid, pending.member);
         return true;
       }
       return correct(jid, pending, raw);                            // correctie of aanvulling
@@ -755,5 +791,5 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       `\nWebapp: ${config().webapp_url ? 'ingesteld' : 'nog niet ingesteld'}`;
   }
 
-  return { handle, report, tick, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendNudges, scanReceipts, tick } };
+  return { handle, report, tick, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendJob, scanReceipts, tick } };
 }
