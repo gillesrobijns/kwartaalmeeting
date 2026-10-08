@@ -613,6 +613,9 @@ const PRIVATE_NOTE =
   'Wat iemand jou privé vertelt, vertel je niet door in de groep, en je zegt niet wat anderen jou privé vroegen. ' +
   'Leden kunnen je privé een screenshot van hun broker sturen of typen wat ze kochten, verkochten of aan dividend kregen ' +
   '("kocht 15 ASML voor 9.214 euro"). Dat wordt apart verwerkt: ze krijgen de regel te zien en na hun "ja" komt die in hun eigen sheet. ' +
+  'Andere manieren: een overzicht of export van hun broker als bestand sturen (csv, Excel of pdf; dan vergelijkt de bot het met hun sheet en vult hij aan wat ontbreekt), ' +
+  'mailen naar gillesrobijns+kwartaal@gmail.com (komt meteen in hun sheet met een mail terug), de mails van hun broker automatisch naar dat adres laten doorsturen ' +
+  '(dan vraagt de bot op WhatsApp of hij de transactie mag ingeven), of een formulier op hun gsm: de persoonlijke link krijgen ze met /formulier. ' +
   'Vraagt iemand hoe dat werkt, leg het zo uit.\n\n';
 const DM_LIMITS = { perPersonDay: 10, totalDay: 40 };
 const DM_FILE = join(DATA_DIR, 'dm_usage.json');
