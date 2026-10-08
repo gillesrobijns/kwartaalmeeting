@@ -597,7 +597,18 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   }
 
   // ---------- gesprek ----------
-  async function handle({ jid, name, text, imgs = [] }) {
+  // Berichten van hetzelfde nummer één voor één afhandelen. Anders kan een tweede bericht (bv. een vraag net na een
+  // screenshot) binnenkomen terwijl de screenshot nog gelezen wordt, en dan belandt het bij de gewone Claude.
+  const queues = new Map();
+  function handle(args) {
+    const prev = queues.get(args.jid) || Promise.resolve();
+    const run = prev.then(() => handleOne(args), () => handleOne(args));
+    const tail = run.catch(() => {});
+    queues.set(args.jid, tail);
+    tail.then(() => { if (queues.get(args.jid) === tail) queues.delete(args.jid); });
+    return run;
+  }
+  async function handleOne({ jid, name, text, imgs = [] }) {
     const raw = (text || '').trim();
     const isAdmin = jid === adminJid();
     if (isAdmin && /^\/invoer\b/i.test(raw)) { await send(jid, report()); return true; }
@@ -704,6 +715,11 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     }
 
     // Een voorstel staat open: ja / stop / correctie
+    if (pending?.stage === 'voorstel' && /\?\s*$/.test(raw) && /(heb je|staat|zit|is).{0,30}\b(al|er al)\b|al in (mijn|je|de) sheet|dubbel/i.test(raw)
+        && pending.sheet && pending.r.rijen.every((x) => x.dup_ok)) {
+      await send(jid, `Nog niet: ik vond ${pending.r.rijen.length > 1 ? 'deze rijen' : 'deze rij'} niet in je sheet, dus het wordt niet dubbel. Antwoord *ja* om ${pending.r.rijen.length > 1 ? 'ze' : 'ze'} toe te voegen, of *stop*.`);
+      return true;
+    }
     if (pending?.stage === 'voorstel') {
       if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); await nextDividend(jid, pending.member); return true; }
       if (YES.test(raw)) {
