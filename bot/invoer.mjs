@@ -27,6 +27,10 @@ const IMAGE_TTL = 60 * 60 * 1000;
 const TX_WORDS = /\b(ge|aan|bij)?(kocht|koop|aankoop|verkocht|verkoop|bought|sold|buy|sell)\b|\bdividend/i;
 const YES = /^\s*(ja+|jaja|jep|yes|ok(e|é|ay)?|klopt|correct|juist|in orde|doe maar|top|perfect|👍|✅)[\s!.👍✅]*$/iu;
 const NO = /^\s*(nee+|neen|stop|annuleer|annuleren|laat maar|cancel|❌)[\s!.]*$/iu;
+const UNDO_RE = /(zet (die|dat|de|het)?\s*(laatste\s*)?(rij\s*|transactie\s*)?terug|ongedaan|\bundo\b|haal (die|de|dat) (laatste )?(rij |transactie )?(weg|eruit)|verwijder (die|de|dat) laatste)/i;
+const CHECK_RE = /(klopt|nakijken|kijk.*na|check|vergelijk|controle|controleer|sheet)/i;
+const FEED_URL = process.env.FEED_URL || 'https://gillesrobijns.github.io/kwartaalmeeting/bot/feed.json';
+const bxNow = () => new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Brussels' }).replace(' ', 'T');   // 2026-10-08T14:05:00
 
 const eur = (x) => new Intl.NumberFormat('nl-BE', { style: 'currency', currency: 'EUR' }).format(x);
 const num = (x) => new Intl.NumberFormat('nl-BE', { maximumFractionDigits: 6 }).format(x);
@@ -59,6 +63,11 @@ const TOOL = {
         },
       },
       onduidelijk: { type: 'array', items: { type: 'string' }, description: 'Wat je niet zeker weet of wat ontbreekt, als korte vragen in het Nederlands aan het lid.' },
+      posities: {
+        type: 'array',
+        description: 'Alleen bij een portefeuilleoverzicht: elke positie met het aantal stuks. Geen cash. Anders leeg.',
+        items: { type: 'object', properties: { aandeel: { type: 'string', description: 'Naam uit de AANDELENLIJST als het erin staat, anders zoals op de afbeelding.' }, aantal: { type: ['number', 'null'] } }, required: ['aandeel', 'aantal'] },
+      },
       zekerheid: { type: 'number', description: 'Hoe zeker je bent dat alle rijen juist zijn, tussen 0 en 1.' },
     },
     required: ['is_transactie', 'rijen', 'onduidelijk', 'zekerheid'],
@@ -77,11 +86,11 @@ const RULES = `Je leest transacties uit berichten van leden van een beleggingscl
   `- Gebruik voor "aandeel" de naam uit de AANDELENLIJST hieronder als het hetzelfde bedrijf of fonds is (bv. "ASML Holding NV" wordt "ASML").\n` +
   `- Twijfel je tussen meerdere namen uit de AANDELENLIJST (fondsen met een gelijkaardige naam, aandelenklassen, een naam die maar half overeenkomt), zet ze dan in "kandidaten" en kies niet zelf. Is het zeker één naam, laat "kandidaten" leeg.\n` +
   `- Verzin niets. Wat je niet ziet, is null, en je zet een vraag in "onduidelijk".\n` +
-  `- Een portefeuilleoverzicht (posities en waarde) is GEEN transactie.\n` +
+  `- Een portefeuilleoverzicht (posities en waarde) is GEEN transactie. Zet dan elke positie met het aantal stuks in "posities".\n` +
   `- Komt er een vorige versie en een correctie van het lid mee, pas dan de vorige versie aan volgens de correctie. Wat het lid zegt, gaat voor op de afbeelding.\n` +
   `- "onduidelijk" bevat ALLEEN vragen die echt nog open staan, kort en aan het lid gericht ("je"). Is alles duidelijk, laat het leeg. Herhaal niet wat het lid al zei en leg niet uit wat je deed.`;
 
-export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJid, claudeTag = '🤖 Claude: ' }) {
+export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJid, claudeTag = '🤖 Claude: ', jobs = true }) {
   const STATE_FILE = join(dataDir, 'invoer.json');
   const USAGE_FILE = join(dataDir, 'invoer_usage.json');
   const QUEUE_FILE = join(dataDir, 'invoer_queue.json');
@@ -89,6 +98,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   const save = (f, obj) => { writeFileSync(`${f}.tmp`, JSON.stringify(obj, null, 1)); renameSync(`${f}.tmp`, f); };
   let state = load(STATE_FILE, {});
   state.members ||= {}; state.pending ||= {}; state.day ||= {};
+  state.last ||= {}; state.posbuf ||= {}; state.nudged ||= {}; state.optout ||= {}; state.snap ||= {}; state.scan ||= {};
   const saveState = () => save(STATE_FILE, state);
   const images = new Map();                                       // jid -> { images, at } (alleen in het geheugen)
 
@@ -221,8 +231,8 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   }
   const rowTag = (r, i) => (r.rijen.length > 1 ? ` (rij ${i + 1})` : '');
   const sheetLine = (h, isDiv) => (isDiv
-    ? `Dividend · ${h.stock} · ${h.amount > 0 ? eur(h.amount) : '?'} · ${dmy(h.date)}`
-    : `${TYPE_NL[h.type] || h.type} · ${num(h.qty)} × ${h.stock} · ${h.total > 0 ? eur(h.total) : '?'} · ${dmy(h.date)}`);
+    ? `Dividend · ${h.stock} · ${dmy(h.date)}`
+    : `${TYPE_NL[h.type] || h.type} · ${num(h.qty)} × ${h.stock} · ${dmy(h.date)}`);
 
   // Zet p.stage en geeft het bericht terug. Volgorde: welk aandeel → wat ontbreekt → dubbel → prijs → bezit → voorstel.
   async function advance(jid, p) {
@@ -280,7 +290,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       for (const y of r.rijen.slice(0, i)) if (UP(y.aandeel) === UP(x.aandeel)) held += y.type === 'Buy' ? y.aantal : y.type === 'Sell' ? -y.aantal : 0;
       if (x.aantal <= held + 1e-6) { x.bezit_ok = true; continue; }
       p.stage = 'bezit'; p.idx = i;
-      return `Volgens je sheet heb je ${held > 1e-6 ? `*${num(held)} ${x.aandeel}*` : `geen ${x.aandeel}`}, dus ${num(x.aantal)} verkopen kan niet${rowTag(r, i)}.\n` +
+      return `Volgens je sheet heb je ${held > 1e-6 ? `minder dan ${num(x.aantal)} ${x.aandeel}` : `geen ${x.aandeel}`}, dus ${num(x.aantal)} verkopen kan niet${rowTag(r, i)}.\n` +
         `Klopt het aantal, of ontbreekt er nog een aankoop in je sheet? Zeg het juiste aantal, of *ja* als het toch klopt.`;
     }
     p.stage = 'voorstel';
@@ -304,6 +314,202 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     return newR;
   };
   const clean = (r) => ({ ...r, rijen: (r.rijen || []).map((x) => Object.fromEntries(Object.entries(x).filter(([k]) => !FLAGS.includes(k)))) });
+
+  // ---------- posities nakijken (screenshot van je portefeuille tegen je sheet) ----------
+  // Noemt alleen WELKE aandelen niet kloppen en of het meer of minder is, nooit aantallen.
+  const holdings = (sh, upTo = null) => {
+    const h = {};
+    for (const t of sh.tx) {
+      if (upTo && !(t.date && t.date < upTo)) continue;
+      const k = UP(t.stock);
+      h[k] = (h[k] || 0) + (t.type === 'Buy' ? t.qty : t.type === 'Sell' ? -t.qty : 0);
+    }
+    return h;
+  };
+  const andList = (a) => (a.length <= 1 ? a.join('') : `${a.slice(0, -1).join(', ')} en ${a[a.length - 1]}`);
+  async function positionsCheck(jid, member, posities) {
+    const byUp = new Map(stockList().map((n) => [UP(n), n]));
+    const prev = state.posbuf[jid];
+    const buf = prev && Date.now() - prev.at < 30 * 60 * 1000 ? prev.list : [];
+    const seen = {};
+    for (const x of [...buf, ...posities]) {
+      if (!x?.aandeel || !(x.aantal > 0) || /^(CASH|EUR|USD|LIQUIDITEIT|SALDO)/i.test(String(x.aandeel).trim())) continue;
+      const name = byUp.get(UP(x.aandeel)) || UP(x.aandeel);
+      seen[name] = (seen[name] || 0) + x.aantal;
+    }
+    state.posbuf[jid] = { at: Date.now(), list: Object.entries(seen).map(([aandeel, aantal]) => ({ aandeel, aantal })) };
+    saveState();
+    const sh = await sheetRows(member);
+    if (!sh) { await send(jid, 'Ik kan je sheet nu niet lezen. Probeer het straks nog eens.'); return true; }
+    const held = holdings(sh);
+    const names = Object.keys(seen);
+    const more = [], less = [], notIn = [], ok = [];
+    for (const n of names) {
+      const h = held[UP(n)] || 0, v = seen[n];
+      if (h <= 1e-6) notIn.push(n);
+      else if (Math.abs(v - h) <= Math.max(0.01, 0.005 * Math.max(v, h))) ok.push(n);
+      else (v > h ? more : less).push(n);
+    }
+    const sheetOnly = Object.entries(held).filter(([k, v]) => v > 0.01 && !names.some((n) => UP(n) === k))
+      .map(([k]) => byUp.get(k) || k);
+    if (!more.length && !less.length && !notIn.length && !sheetOnly.length) {
+      await send(jid, `✅ Alles klopt: je sheet heeft dezelfde ${names.length} aandelen en aantallen als je screenshot.`);
+      return true;
+    }
+    const b = (a) => andList(a.map((n) => `*${n}*`));
+    const lines = [`Ik vergeleek ${names.length} ${names.length === 1 ? 'lijn' : 'lijnen'} met je sheet.${ok.length ? ` ${ok.length} ${ok.length === 1 ? 'klopt' : 'kloppen'}.` : ''}`];
+    if (more.length) lines.push(`Bij ${b(more)} heb je er volgens je screenshot *meer* dan in je sheet.`);
+    if (less.length) lines.push(`Bij ${b(less)} heb je er volgens je screenshot *minder* dan in je sheet.`);
+    if (notIn.length) lines.push(`${b(notIn)} ${notIn.length === 1 ? 'staat' : 'staan'} op je screenshot, maar niet in je sheet.`);
+    if (sheetOnly.length) lines.push(`${b(sheetOnly)} ${sheetOnly.length === 1 ? 'staat' : 'staan'} niet op je screenshot, maar wel in je sheet.`);
+    let t = lines.join('\n') + '\n\nOntbreekt er een transactie? Stuur ze gerust door, of zet ze zelf in je sheet.';
+    if (sheetOnly.length) t += '\n(Heb je nog een andere broker? Stuur die screenshot er binnen het halfuur bij, dan tel ik ze samen.)';
+    await send(jid, t);
+    return true;
+  }
+
+  // ---------- ongedaan maken ----------
+  const scanSince = (at) => {                                      // liep de maandagscan sinds dit tijdstip?
+    const s0 = state.scan.seen;
+    if (!s0) return false;
+    const local = new Date(at).toLocaleString('sv-SE', { timeZone: 'Europe/Brussels' }).replace(' ', 'T').slice(0, 16);
+    return s0 > local;
+  };
+  async function undoAsk(jid) {
+    const L = state.last[jid];
+    if (!L || Date.now() - L.at > 7 * 864e5) { await send(jid, 'Ik vind geen rij die ik onlangs voor je in je sheet zette. Pas het zelf aan in je sheet, de maandagscan neemt de wijziging mee.'); return true; }
+    if (scanSince(L.at)) { await send(jid, 'Die rij is al door de maandagscan verwerkt. Pas ze zelf aan in je sheet; de volgende scan neemt de wijziging mee.'); return true; }
+    const hhmm = new Date(L.at).toLocaleTimeString('nl-BE', { timeZone: 'Europe/Brussels', hour: '2-digit', minute: '2-digit' });
+    const lines = L.rows.map((x) => `*${TYPE_NL[x.type] || x.type} · ${x.stock} · ${dmy(x.date)}*`).join('\n');
+    state.pending[jid] = { stage: 'undo', member: L.member, at: Date.now() };
+    saveState();
+    await send(jid, `${L.rows.length > 1 ? 'Deze rijen haal' : 'Deze rij haal'} ik uit je sheet:\n${lines}\n(doorgegeven om ${hhmm})\n\nZeker? Antwoord *ja* of *nee*.`);
+    return true;
+  }
+  async function undoDo(jid) {
+    const L = state.last[jid];
+    delete state.pending[jid]; saveState();
+    if (!L) { await send(jid, 'Ik vind die rij niet meer.'); return true; }
+    try {
+      const res = await fetch(config().webapp_url, { method: 'POST', headers: { 'content-type': 'text/plain' }, redirect: 'follow',
+        body: JSON.stringify({ token: token(), action: 'undo', member: L.member, rows: L.rows.map((x) => ({ tab: x.type === 'Dividend' ? 'Dividenden' : 'Transacties', row: x.row, stock: x.stock })) }) });
+      const out = JSON.parse(await res.text());
+      if (!out.ok) throw new Error(out.error || 'webapp weigerde');
+      const gone = (out.results || []).filter((x) => x.status === 'removed').length;
+      delete state.last[jid]; saveState();
+      if (gone === L.rows.length) await send(jid, '↩️ Weg uit je sheet. Stuur gerust de juiste door.');
+      else if (gone) await send(jid, `↩️ ${gone} van de ${L.rows.length} rijen zijn weg. De andere werden intussen in je sheet aangepast, die laat ik staan.`);
+      else await send(jid, 'Die rij werd intussen in je sheet aangepast, dus ik laat ze staan. Pas het zelf aan als het nodig is.');
+      const a = adminJid();
+      if (a && a !== jid && gone) getSock().sendMessage(a, { text: claudeTag + `↩️ ${L.member} haalde ${gone > 1 ? `${gone} doorgegeven rijen` : 'een doorgegeven rij'} weer weg: ${[...new Set(L.rows.map((x) => x.stock))].join(', ')}` }).catch(() => {});
+    } catch (e) {
+      log('invoer undo:', e.message);
+      await send(jid, 'Het lukte niet om de rij weg te halen. Pas het zelf aan in je sheet, of probeer het later nog eens.');
+    }
+    return true;
+  }
+
+  // ---------- geplande taken: dividend-seintje en bevestiging na de maandagscan ----------
+  const recipients = () => {
+    const out = new Map(Object.entries(state.members));
+    const a = adminJid();
+    if (a && ![...out.values()].includes('Gilles')) out.set(a, 'Gilles');
+    return [...out.entries()];                                     // [jid, member]
+  };
+  const divCache = new Map();
+  async function dividendsOf(ticker) {                             // [{ ex: 'YYYY-MM-DD' }] van de laatste 3 maanden
+    const k = `${ticker}|${today()}`;
+    if (divCache.has(k)) return divCache.get(k);
+    let out = [];
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo&events=div`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      const res = (await r.json())?.chart?.result?.[0];
+      const tz = res?.meta?.exchangeTimezoneName || 'UTC';
+      out = Object.values(res?.events?.dividends || {}).map((d) => ({ ex: new Date(d.date * 1000).toLocaleDateString('sv-SE', { timeZone: tz }), amount: d.amount || 0 }));
+    } catch (e) { log('invoer dividend', ticker, e.message); }
+    divCache.set(k, out);
+    return out;
+  }
+  const addDays = (iso, n) => new Date(Date.parse(`${iso}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+  async function dividendNudges() {
+    let tickers = {};
+    try { tickers = JSON.parse(readFileSync(join(hereDir, 'tickers.json'), 'utf8')); } catch { return; }
+    const byUp = new Map(Object.keys(tickers).map((n) => [UP(n), n]));
+    const t0 = today();
+    for (const [jid, member] of recipients()) {
+      if (state.optout[member] || state.pending[jid]) continue;
+      const sh = await sheetRows(member);
+      if (!sh) continue;
+      const stocks = [...new Set(sh.tx.map((t) => byUp.get(UP(t.stock))).filter(Boolean))];
+      let sent = false;
+      for (const stock of stocks) {
+        if (sent) break;
+        for (const ev of await dividendsOf(tickers[stock])) {
+          if (ev.ex < addDays(t0, -45) || ev.ex > addDays(t0, -14)) continue;   // betaling is dan meestal binnen
+          const key = `${member}|${stock}|${ev.ex}`;
+          if (state.nudged[key]) continue;
+          const had = holdings(sh, ev.ex)[UP(stock)] || 0;
+          if (!(had > 1e-6) || had * ev.amount < 1) continue;           // geen positie, of minder dan ± 1 euro bruto: niet storen
+          if ((sh.div || []).some((d) => UP(d.stock) === UP(stock) && d.date && d.date >= addDays(ev.ex, -7) && d.date <= addDays(ev.ex, 75))) { state.nudged[key] = 'al in sheet'; continue; }
+          state.nudged[key] = new Date().toISOString();
+          state.pending[jid] = { stage: 'dividend', member, stock, ex: ev.ex, at: Date.now() };
+          saveState();
+          await send(jid, `💶 ${stock} keerde dividend uit (ex-dividenddatum ${dmy(ev.ex)}). Volgens je sheet had je ze toen.\nHoeveel kwam er netto binnen (na roerende voorheffing)? Of zeg *nee* als je het al ingaf of geen dividend kreeg.`).catch((e) => log('invoer nudge:', e.message));
+          sent = true;
+          break;
+        }
+      }
+    }
+    saveState();
+  }
+  const rowKey = (x, div) => (div ? `D|${UP(x.stock)}|${x.date}|${x.amount}` : `T|${UP(x.stock)}|${x.type}|${x.qty}|${x.date}|${x.total}`);
+  async function scanReceipts(baselineOnly = false) {
+    for (const [jid, member] of recipients()) {
+      const sh = await sheetRows(member);
+      if (!sh) continue;
+      const now = [...sh.tx.map((x) => ({ x, div: false })), ...(sh.div || []).map((x) => ({ x, div: true }))];
+      const prev = state.snap[member];
+      state.snap[member] = now.map((e) => rowKey(e.x, e.div));
+      if (baselineOnly || !prev) continue;
+      const left = new Map();
+      for (const k of prev) left.set(k, (left.get(k) || 0) + 1);
+      const fresh = [];
+      for (const e of now) { const k = rowKey(e.x, e.div); if (left.get(k) > 0) left.set(k, left.get(k) - 1); else fresh.push(e); }
+      if (!fresh.length) continue;
+      const names = [...new Set(fresh.map((e) => (e.div ? `dividend ${e.x.stock}` : e.x.stock)))];
+      let t = `📬 De maandagscan verwerkte deze week ${fresh.length} ${fresh.length === 1 ? 'nieuwe rij' : 'nieuwe rijen'} uit je sheet: ${andList(names)}. Ze tellen mee voor de volgende meeting.`;
+      const bad = fresh.filter((e) => !e.x.date || (!e.div && (!['Buy', 'Sell'].includes(e.x.type) || !(e.x.qty > 0))))
+        .map((e) => `rij ${e.x.row} (${!e.x.date ? 'datum ontbreekt' : !['Buy', 'Sell'].includes(e.x.type) ? 'type ontbreekt' : 'aantal ontbreekt'})`);
+      if (bad.length) t += `\n\n⚠️ Bij ${bad.length === 1 ? 'één nieuwe rij' : `${bad.length} nieuwe rijen`} ontbreekt iets: ${andList(bad)}. Kijk je die even na?`;
+      await send(jid, t).catch((e) => log('invoer receipt:', e.message));
+    }
+    saveState();
+  }
+  let busy = false;
+  async function tick() {
+    if (busy) return;
+    busy = true;
+    try {
+      const now = bxNow(), hour = +now.slice(11, 13), day = now.slice(0, 10);
+      try {
+        const feed = await (await fetch(FEED_URL, { headers: { 'cache-control': 'no-cache' } })).json();
+        const sc = feed?.duvel?.scanned_at;
+        if (sc && sc !== state.scan.seen) {
+          const first = !state.scan.seen;
+          state.scan.seen = sc;
+          if (first) await scanReceipts(true); else state.scan.due = true;
+          saveState();
+        }
+      } catch (e) { log('invoer feed:', e.message); }
+      if (state.scan.due && hour >= 8 && hour < 22) { state.scan.due = false; saveState(); await scanReceipts(); }
+      if (hour === 10 && state.scan.divday !== day) { state.scan.divday = day; saveState(); await dividendNudges(); }
+    } catch (e) { log('invoer tick:', e.message); }
+    busy = false;
+  }
+  if (jobs && config().webapp_url !== undefined) {
+    setTimeout(tick, 2 * 60 * 1000);
+    setInterval(tick, 15 * 60 * 1000);
+  }
 
   async function readSmart(args, jid, forceStrong = false) {
     let r = null;
@@ -385,8 +591,37 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       delete state.pending[jid];
       if (saved?.r) {
         await step(jid, { member: pick, r: saved.r, tries: 0 }, `Dag ${pick}, genoteerd.\n\n`);
+      } else if (saved?.pos) {
+        saveState(); await send(jid, `Dag ${pick}, genoteerd.`); await positionsCheck(jid, pick, saved.pos);
       } else { saveState(); await send(jid, `Dag ${pick}, genoteerd.`); }
       return true;
+    }
+
+    // Ongedaan maken
+    if (pending?.stage === 'undo') {
+      if (YES.test(raw)) return undoDo(jid);
+      delete state.pending[jid]; saveState();
+      if (NO.test(raw)) { await send(jid, 'Oké, ik laat ze staan.'); return true; }
+    } else if (UNDO_RE.test(raw) && raw.length < 80 && !imgs.length) return undoAsk(jid);
+
+    // Antwoord op een dividend-seintje
+    if (pending?.stage === 'dividend') {
+      if (/(geen seintjes|niet meer vragen|nooit meer|stop met (de )?seintjes)/i.test(raw)) {
+        state.optout[pending.member] = true; delete state.pending[jid]; saveState();
+        await send(jid, 'Oké, ik stuur je geen dividend-seintjes meer.'); return true;
+      }
+      if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, genoteerd.'); return true; }
+      const m = raw.match(/(\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
+      if (m && raw.length < 60) {
+        const v = m[1].includes(',') ? +m[1].replace(/[.\s]/g, '').replace(',', '.') : +m[1].replace(/\s/g, '');
+        if (v > 0) {
+          const r = { is_transactie: true, zekerheid: 1, onduidelijk: [], rijen: [{ type: 'Dividend', aandeel: pending.stock, in_lijst: true, keuze_ok: true, aantal: null, totaal_eur: v, munt_gezien: 'EUR', datum: pending.ex }] };
+          await step(jid, { member: pending.member, r, tries: 0 });
+          return true;
+        }
+      }
+      delete state.pending[jid]; saveState();                       // iets anders: gewoon gesprek
+      return false;
     }
 
     // Een controlevraag staat open
@@ -446,6 +681,8 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
           if (out.queued) await send(jid, '✅ Goedgekeurd. Gilles zet het in je sheet; de maandagscan neemt het daarna mee.');
           else {
             const done = (out.results || []).filter((x) => x.status === 'written').length;
+            const wrote = (out.results || []).map((x, k) => (x.status === 'written' && x.row ? { row: x.row, stock: x.stock || rows[k].stock, type: rows[k].type, date: rows[k].date } : null)).filter(Boolean);
+            if (wrote.length) { state.last[jid] = { member: pending.member, at: Date.now(), rows: wrote }; saveState(); }
             const dup = (out.results || []).filter((x) => x.status === 'duplicate').length;
             let t = done ? `✅ Staat in je sheet${done > 1 ? ` (${done} rijen)` : ''}. De maandagscan neemt het mee.` : '';
             if (dup) t += `${t ? '\n' : ''}${dup > 1 ? `${dup} rijen stonden` : 'Die rij stond'} al in je sheet, dus niets dubbel ingegeven.`;
@@ -475,6 +712,13 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     await getSock().sendPresenceUpdate('composing', jid).catch(() => {});
     const r = await readSmart({ member, text: raw, imgs }, jid);
     saveState();
+    if (r && !r.is_transactie && imgs.length && (r.posities || []).length && (!raw || CHECK_RE.test(raw))) {
+      if (member) return positionsCheck(jid, member, r.posities);
+      state.pending[jid] = { stage: 'wie', at: Date.now(), saved: { pos: r.posities } };
+      saveState();
+      await send(jid, `Ik vergelijk je screenshot graag met je sheet, maar ik ken je nummer nog niet. Wie ben je? Antwoord met je voornaam: ${MEMBERS.join(', ')}.`);
+      return true;
+    }
     if (!r || !r.is_transactie || !r.rijen?.length) return false;   // gewoon gesprek: Claude antwoordt zoals altijd
 
     if (!member) {
@@ -511,5 +755,5 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       `\nWebapp: ${config().webapp_url ? 'ingesteld' : 'nog niet ingesteld'}`;
   }
 
-  return { handle, report, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state } };
+  return { handle, report, tick, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendNudges, scanReceipts, tick } };
 }
