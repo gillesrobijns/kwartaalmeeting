@@ -251,15 +251,15 @@ export function createKanalen({ invoer, getSock, log, adminJid, claudeTag = '�
     const member = state.members[jid] || (isAdmin ? 'Gilles' : null);
     if (isAdmin && /^\/formulieren\b/i.test(raw)) {
       const u = I.config().webapp_url;
-      await I.send(jid, u ? `📝 Persoonlijke formulier-links:\n${I.MEMBERS.map((m) => `• ${m}: ${formLink(m)}`).join('\n')}` : 'Er is nog geen webapp ingesteld.');
+      await I.send(jid, u ? `📝 Persoonlijke formulier-links${ks.live ? '' : ' (werken pas als de nieuwe versie van de webapp uitgerold is)'}:\n${I.MEMBERS.map((m) => `• ${m}: ${formLink(m)}`).join('\n')}` : 'Er is nog geen webapp ingesteld.');
       return true;
     }
     if (/^\/formulier\b/i.test(raw)) {
       if (!member) { await I.send(jid, 'Ik ken je nummer nog niet. Geef eerst één transactie door (screenshot of tekst), dan koppel ik je nummer en krijg je je link.'); return true; }
-      const link = formLink(member);
+      const link = ks.live ? formLink(member) : null;
       await I.send(jid, link
         ? `📝 Jouw formulier, ${member}:\n${link}\n\nZet het op je beginscherm (Delen → Zet op beginscherm). De link is persoonlijk: alles wat je ermee ingeeft, komt in jouw sheet.`
-        : 'Het formulier staat nog niet aan.');
+        : 'Het formulier staat nog niet aan. Gilles zet het binnenkort aan; tot dan kan je me gewoon een screenshot sturen.');
       return true;
     }
     const got = await intercept(jid, raw);
@@ -387,6 +387,7 @@ export function createKanalen({ invoer, getSock, log, adminJid, claudeTag = '�
       const out = await webapp({ action: 'inbox' });
       if (!out.ok) { if (out.error !== lastErr) log('kanalen inbox:', out.error); lastErr = out.error; return; }
       lastErr = '';
+      if (!ks.live) { ks.live = new Date().toISOString(); saveKs(); log('kanalen: webapp kent inbox, mail en formulier staan aan'); }
       for (const ev of out.events || []) formEvent(ev);
       for (const m of out.mails || []) {
         try { await handleMail(m); } catch (e) { log('kanalen mail:', e.stack || e.message); }
