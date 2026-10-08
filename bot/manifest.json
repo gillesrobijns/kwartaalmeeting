@@ -1,9 +1,9 @@
 {
- "version": "20261008-1307",
+ "version": "20261008-1414",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "ed8c02c19ca52da666cb8db476eb0e1a17daca76737f1dd763cb3cf15eb9daf0"
+   "sha256": "306cea63aee7167faa795399896c73d5ea28ac6db4811456f923bae8c65261f3"
   },
   {
    "name": "clubdata.mjs",
@@ -11,7 +11,7 @@
   },
   {
    "name": "updater.mjs",
-   "sha256": "0ed0e4cc0df0f0f792ad3ac94835cdf81138405a74939fc9607e88784d9da958"
+   "sha256": "8559d512ce005870ec7ea1e8b71a40694bad1c724aa168d23b95b57ae287272b"
   },
   {
    "name": "pricewatch.mjs",
@@ -51,7 +51,7 @@
   },
   {
    "name": "invoer.mjs",
-   "sha256": "b5016d22d717325d5fed8d25c0d1c7767398901da1ce0a4e20e3bed5fd70de75"
+   "sha256": "5d399965467a1e7fb062c4223f271fb8784a7d76d61fa2604cfb4736aaabe52f"
   },
   {
    "name": "invoer_config.json",
@@ -60,6 +60,10 @@
   {
    "name": "models.json",
    "sha256": "f3ce0de4a9e1395a045fdaa4187636e5ceb5cca273c68b2a796c6b7ebeeea2e4"
+  },
+  {
+   "name": "kanalen.mjs",
+   "sha256": "4289171e49833c0e2d261285eecb92631769b007cc92cb95df8b0c6d7e0e172f"
   }
  ]
 }
