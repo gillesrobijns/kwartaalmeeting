@@ -1,5 +1,5 @@
 {
- "version": "20261008-1214",
+ "version": "20261008-1307",
  "files": [
   {
    "name": "bot.mjs",
@@ -31,7 +31,7 @@
   },
   {
    "name": "tickers.json",
-   "sha256": "25ef44e56c071c0f83f57a3a3f11a4f2429e1cf5a834118e55d8aaa287289d04"
+   "sha256": "507bea0150413414b4d720d47928ed16f706e0f06244982460d137ec815010ea"
   },
   {
    "name": "trader.mjs",
