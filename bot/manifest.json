@@ -1,5 +1,5 @@
 {
- "version": "20261008-1029",
+ "version": "20261008-1121",
  "files": [
   {
    "name": "bot.mjs",
@@ -35,7 +35,7 @@
   },
   {
    "name": "trader.mjs",
-   "sha256": "85b6617eab179d345291658aa9b04f79a2280e3380948774f1a44bb1433d0d18"
+   "sha256": "1d807a4230a6a64ddd708364d7e10c12348c9e125162907c0bb1230e35456c07"
   },
   {
    "name": "autopost.mjs",
@@ -51,7 +51,7 @@
   },
   {
    "name": "invoer.mjs",
-   "sha256": "a18fa164c75d1e00f38f53022b568658aedbe5bf4d485a4f7120230265ac94de"
+   "sha256": "d8da1e3ce16befd3def8c8dd24663b38c7a572163dc3bf1aee86ebd85e364db9"
   },
   {
    "name": "invoer_config.json",
