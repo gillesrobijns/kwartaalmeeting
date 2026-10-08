@@ -1,9 +1,9 @@
 {
- "version": "20261008-1158",
+ "version": "20261008-1214",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "31d782bac344adb8b16d7263eceae859e26c88daa619ce7191bc52acbc78cb93"
+   "sha256": "ed8c02c19ca52da666cb8db476eb0e1a17daca76737f1dd763cb3cf15eb9daf0"
   },
   {
    "name": "clubdata.mjs",
@@ -15,7 +15,7 @@
   },
   {
    "name": "pricewatch.mjs",
-   "sha256": "e5fffa918ebb579d0597bd8c1d77869f985e29660d8102cdb5a1ec1d8699f73f"
+   "sha256": "ba77f8128184dfdaac096448b7ca50e1257173f353f963a2b300d94e11888652"
   },
   {
    "name": "persona.md",
