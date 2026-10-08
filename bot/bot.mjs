@@ -38,7 +38,7 @@ const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
 
 // ---------- club data ----------
 let club = { summary: 'CLUBDATA: (nog niet geladen)', stocks: [] };
-let trader = null, autopost = null, pdfLib = null;                // phase 2/3 modules, loaded below (optional)
+let trader = null, autopost = null, pdfLib = null, invoer = null;                // phase 2/3 modules, loaded below (optional)
 async function refreshClub() {
   try { club = await fetchClubSummary(); log(`club data loaded (${club.summary.length} chars, ${club.stocks.length} stocks)`); }
   catch (e) { log('club data refresh failed:', e.message); }
@@ -536,7 +536,10 @@ function adminJid() {
 const PRIVATE_NOTE =
   'In een privégesprek mag je iets uitgebreider zijn (hoogstens zes zinnen) en meer op zijn eigen portefeuille ingaan. ' +
   'Dezelfde regels blijven gelden: geen eurobedragen, niets over het lopende kwartaal, geen professioneel advies. ' +
-  'Wat iemand jou privé vertelt, vertel je niet door in de groep, en je zegt niet wat anderen jou privé vroegen.\n\n';
+  'Wat iemand jou privé vertelt, vertel je niet door in de groep, en je zegt niet wat anderen jou privé vroegen. ' +
+  'Leden kunnen je privé een screenshot van hun broker sturen of typen wat ze kochten, verkochten of aan dividend kregen ' +
+  '("kocht 15 ASML voor 9.214 euro"). Dat wordt apart verwerkt: ze krijgen de regel te zien en na hun "ja" komt die in hun eigen sheet. ' +
+  'Vraagt iemand hoe dat werkt, leg het zo uit.\n\n';
 const DM_LIMITS = { perPersonDay: 10, totalDay: 40 };
 const DM_FILE = join(DATA_DIR, 'dm_usage.json');
 let dmUsage = existsSync(DM_FILE) ? JSON.parse(readFileSync(DM_FILE, 'utf8')) : {};
@@ -601,6 +604,12 @@ async function privateChat(msg, text) {
     await sock.sendMessage(from, { text: reply }, { quoted: msg });
     remember(from, 'De aap', reply);
     return;
+  }
+  if (invoer) {                                                     // transactie doorgeven (screenshot of tekst)
+    try {
+      const imgs = hasImage(msg) ? await imagesOf(msg, null) : [];
+      if (await invoer.handle({ jid: from, name, text, imgs })) { await sock.sendPresenceUpdate('paused', from).catch(() => {}); return; }
+    } catch (e) { log('invoer error:', e.message); }
   }
   const { total, mine } = dmCount(from);
   if (mine >= DM_LIMITS.perPersonDay || total >= DM_LIMITS.totalDay) {
@@ -1038,6 +1047,11 @@ if (autopostMod) {
     compose: composeShort, remember: (jid, who, text) => remember(jid, who, text), pdf: pdfLib, asClaude,
   });
   log('autopost started');
+}
+const invoerMod = await import('./invoer.mjs').catch((e) => { log('invoer module not loaded:', e.message); return null; });
+if (invoerMod) {
+  invoer = invoerMod.createInvoer({ anthropic, getSock: () => sock, log, dataDir: DATA_DIR, hereDir: HERE, adminJid, claudeTag: CLAUDE_TAG });
+  log('invoer started');
 }
 await refreshClub();                                              // again, now with the bot portfolios
 
