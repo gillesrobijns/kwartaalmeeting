@@ -42,7 +42,7 @@ function modelFor(feature) {
   try { const m = JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8'))[feature]; if (m) return m; } catch {}
   return CFG.model;
 }
-const thinkingFor = (model) => (/haiku/.test(model) ? undefined : { type: 'between_tools' });   // Sonnet 5.5 thinks by default
+const thinkingFor = (model) => (/haiku/.test(model) ? { type: 'disabled' } : { type: 'between_tools' });   // both think by default; Haiku 5.5 refuses between_tools, and with thinking on a short max_tokens returns no text
 
 // ---------- cost per feature and model (data/usage_models.json), read with /kosten ----------
 const USAGE_MODELS_FILE = join(DATA_DIR, 'usage_models.json');
@@ -1057,8 +1057,10 @@ async function composeBreaking(hits) {
         tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
         messages,
       });
-      const text = finalText(res.content);
+      let text = finalText(res.content);
       if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
+      const at = text.indexOf('🚨');                               // the model sometimes writes a sentence about its search first: cut it off
+      if (at > 0) text = text.slice(at).trim();
       return text ? (text.startsWith('🚨') ? text : `🚨 ${text}`) : fallback;
     }
   } catch (e) { log('breaking compose failed:', e.message); }
