@@ -539,6 +539,17 @@ function finalText(content) {
 const TOOLS = [
   { type: 'web_search_20260318', name: 'web_search', max_uses: 3 },
   {
+    name: 'koers',
+    description: 'Live koers van een aandeel, ETF, index of crypto: koers nu, beweging vandaag tegenover de vorige slotkoers, 5 beursdagen, een maand en 52 weken. ' +
+      'Gebruik dit ALTIJD vóór je iets zegt over hoe een koers beweegt (gestegen, gezakt, waarom), en vóór je op het web naar de reden zoekt. ' +
+      'Geeft ook de nieuwskoppen van de laatste twee dagen, die verser zijn dan web search. Een aandeel per oproep; voor meerdere aandelen roep je het meerdere keren op.',
+    input_schema: {
+      type: 'object',
+      properties: { aandeel: { type: 'string', description: "Naam of ticker, bv. \"D'Ieteren\", \"NVDA\", \"BEL 20\", \"bitcoin\"" } },
+      required: ['aandeel'],
+    },
+  },
+  {
     name: 'idee_doorsturen',
     description: 'Stuur een idee of verzoek van een clublid voor het dashboard, de presentatie of de bot door naar Gilles, die het dashboard beheert. ' +
       'Gebruik dit als iemand echt iets nieuws of een aanpassing vraagt, en ook als iemand om een pdf, rapport of verslag vraagt (die maak je niet zelf).',
@@ -738,7 +749,7 @@ async function askClaude(jid, asker, question, extra = '', priv = false, images 
       { type: 'text', text: tail }],
   }];
   let text = '';
-  for (let round = 0; round < 4; round++) {
+  for (let round = 0; round < 6; round++) {
     const res = await anthropic.messages.create({
       _feature: 'claude', model: modelFor('claude'),
       max_tokens: 4000,
@@ -759,7 +770,13 @@ async function askClaude(jid, asker, question, extra = '', priv = false, images 
     for (const block of res.content) {
       if (block.type !== 'tool_use') continue;
       let out = 'Onbekende tool.';
-      if (block.name === 'idee_doorsturen') {
+      if (block.name === 'koers') {
+        try {
+          const m = await import('./pricewatch.mjs');             // cached module; avoids the not-yet-initialised `pw` during startup
+          out = m.koersInfo ? await m.koersInfo(HERE, String(block.input?.aandeel || '')) : 'Koersen zijn nu niet beschikbaar.';
+        } catch (e) { out = `Geen koers: ${e.message}`; }
+        log(`koers ${block.input?.aandeel}: ${out.slice(0, 120)}`);
+      } else if (block.name === 'idee_doorsturen') {
         try { out = await forwardIdea(block.input); } catch (e) { out = `Doorsturen mislukt: ${e.message}`; }
       } else if (block.name === 'pdf_maken') {
         try { out = await makePdf(jid, block.input); } catch (e) { log('pdf failed:', e.message); out = `Pdf maken mislukt: ${e.message}`; }
