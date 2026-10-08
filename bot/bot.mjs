@@ -482,6 +482,7 @@ async function adminCommand(from, text) {
   if (from !== adminJid()) return false;
   if (/^\/(meeting|aap)\b/.test(text)) { await verdictPreview(from); return true; }
   if (/^\/gemist\b/.test(text)) { await catchupPreview(from); return true; }
+  if (/^\/idee(e|ë)n\b/.test(text)) { await sock.sendMessage(from, { text: CLAUDE_TAG + ideasReport() }); return true; }
   if (/^\/kosten\b/.test(text)) { await sock.sendMessage(from, { text: CLAUDE_TAG + costReport() }); return true; }
   if (catchup && /^(ja|yes|ok|post)\b/.test(text)) { await catchupPost(from); return true; }
   if (catchup && /^opnieuw\b/.test(text)) { catchup = null; await catchupPreview(from); return true; }
@@ -538,7 +539,8 @@ const TOOLS = [
   { type: 'web_search_20260318', name: 'web_search', max_uses: 3 },
   {
     name: 'idee_doorsturen',
-    description: 'Stuur een idee of verzoek van een clublid voor het dashboard, de presentatie of de bot door naar Gilles, die het dashboard beheert. Gebruik dit alleen als iemand echt iets nieuws of een aanpassing vraagt.',
+    description: 'Stuur een idee of verzoek van een clublid voor het dashboard, de presentatie of de bot door naar Gilles, die het dashboard beheert. ' +
+      'Gebruik dit als iemand echt iets nieuws of een aanpassing vraagt, en ook als iemand om een pdf, rapport of verslag vraagt (die maak je niet zelf).',
     input_schema: {
       type: 'object',
       properties: {
@@ -548,31 +550,9 @@ const TOOLS = [
       required: ['van', 'idee'],
     },
   },
-  {
-    name: 'pdf_maken',
-    description: 'Maak een pdf-rapportje en stuur het in dit gesprek. Alleen als iemand uitdrukkelijk om een pdf, rapport of verslag vraagt. ' +
-      'Schrijf de inhoud zelf, kort en helder, met cijfers uit de clubdata (procenten, geen eurobedragen). Je antwoord in de chat is daarna één korte zin.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        titel: { type: 'string' },
-        ondertitel: { type: 'string' },
-        secties: {
-          type: 'array', maxItems: 8,
-          items: { type: 'object', properties: { kop: { type: 'string' }, tekst: { type: 'string', description: 'Mag <b>vet</b> bevatten' }, punten: { type: 'array', items: { type: 'string' } } } },
-        },
-        tabel: {
-          type: 'object',
-          properties: { kop: { type: 'string' }, kolommen: { type: 'array', items: { type: 'string' } }, rijen: { type: 'array', items: { type: 'array', items: { type: 'string' } } } },
-        },
-        bestandsnaam: { type: 'string', description: 'Kort, zonder .pdf' },
-      },
-      required: ['titel', 'secties'],
-    },
-  },
 ];
 
-// PDF reports on request: at most 4 per day in total.
+// PDF reports on request: switched off 8 Oct 2026 (requests go to Gilles via idee_doorsturen). Kept for reference, at most 4 per day.
 const PDF_FILE = join(DATA_DIR, 'pdf_usage.json');
 async function makePdf(jid, input) {
   if (!pdfLib) return 'Pdf maken lukt nu niet (module ontbreekt).';
@@ -586,6 +566,20 @@ async function makePdf(jid, input) {
   return 'De pdf is verstuurd.';
 }
 
+const IDEAS_FILE = join(DATA_DIR, 'ideas_log.json');              // every idea and request, newest last
+function logIdea(van, idee) {
+  let all = [];
+  try { all = existsSync(IDEAS_FILE) ? JSON.parse(readFileSync(IDEAS_FILE, 'utf8')) : []; } catch {}
+  all.push({ van, idee, at: new Date().toISOString() });
+  try { writeFileSync(IDEAS_FILE + '.tmp', JSON.stringify(all, null, 1)); renameSync(IDEAS_FILE + '.tmp', IDEAS_FILE); } catch {}
+}
+function ideasReport() {
+  let all = [];
+  try { all = JSON.parse(readFileSync(IDEAS_FILE, 'utf8')); } catch {}
+  if (!all.length) return 'Nog geen ideeën of verzoeken.';
+  const d = (t) => new Date(t).toLocaleDateString('nl-BE', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Brussels' });
+  return `Ideeën en verzoeken (${all.length}, nieuwste eerst):\n` + all.slice(-15).reverse().map((x) => `• ${d(x.at)} ${x.van}: ${x.idee}`).join('\n');
+}
 async function forwardIdea({ van, idee }) {
   const admin = adminJid();
   if (!admin) {
@@ -596,7 +590,8 @@ async function forwardIdea({ van, idee }) {
     writeFileSync(f, JSON.stringify(pending, null, 1));
     return 'Bewaard voor Gilles (hij krijgt het zodra hij zich als beheerder meldt).';
   }
-  await sock.sendMessage(admin, { text: `📥 *Nieuw idee van ${van}*\n${idee}` });
+  logIdea(van, idee);
+  await sock.sendMessage(admin, { text: `📥 *Nieuw idee van ${van}*\n${idee}\n\n(Staat op je lijst: /ideeen)` });
   log(`idea forwarded from ${van}`);
   return 'Doorgestuurd naar Gilles.';
 }
@@ -1143,6 +1138,13 @@ await refreshClub();                                              // again, now 
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 createServer(async (req, res) => {
+  if (req.url.startsWith('/feed/ideas.json')) {                   // ideas and requests from members, for the roadmap backlog
+    let body = '[]';
+    try { body = readFileSync(IDEAS_FILE, 'utf8'); } catch {}
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(body);
+    return;
+  }
   if (req.url.startsWith('/feed/costs.json')) {                   // API cost per feature and model, read by the laptop for the cost slide
     let body = '{}';
     try { body = readFileSync(USAGE_MODELS_FILE, 'utf8'); } catch {}
