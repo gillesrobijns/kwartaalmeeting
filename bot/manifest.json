@@ -1,9 +1,9 @@
 {
- "version": "20261008-1416",
+ "version": "20261008-1419",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "306cea63aee7167faa795399896c73d5ea28ac6db4811456f923bae8c65261f3"
+   "sha256": "0d3303741562f08272f2e0ddc7bf1d1998db556020c8e6ba86a6b16aacd5cc20"
   },
   {
    "name": "clubdata.mjs",
@@ -63,7 +63,7 @@
   },
   {
    "name": "kanalen.mjs",
-   "sha256": "90b29b1500b260cc472c5caadae6c3d9deb1ef159bc1366f07f77fcfb1dd6d38"
+   "sha256": "b6b9620b9f352db8a19e4ad126de041026cae648a21f0c8465edc1aeb8959fb3"
   }
  ]
 }
