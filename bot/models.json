@@ -1,0 +1,9 @@
+{
+ "_uitleg": "Welk model doet wat. Ontbreekt een regel, dan Sonnet. Haiku pas na een test naast elkaar.",
+ "claude": "claude-sonnet-5-5",
+ "aap": "claude-sonnet-5-5",
+ "breaking": "claude-sonnet-5-5",
+ "auto": "claude-sonnet-5-5",
+ "gemist": "claude-sonnet-5-5",
+ "oordeel": "claude-sonnet-5-5"
+}
