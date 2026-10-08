@@ -27,13 +27,73 @@ const CFG = {
   dailyLimit: Number(process.env.DAILY_LIMIT_V2 || 20),           // max Claude replies per day (all groups)
   groupFilter: (process.env.GROUP_NAME || '').toLowerCase(),        // optional: only this group
   adminPhone: (process.env.ADMIN_PHONE || '').replace(/\D/g, ''),   // Gilles: receives ideas
-  historySize: 40,
+  historySize: 60,                                               // kept 40-60: trimmed 20 at a time so the cached prefix stays stable
+  historyTrimTo: 40,
   refreshMs: 3 * 60 * 60 * 1000,                                  // club data every 3 hours
 };
 
 const STATUS = { started: new Date().toISOString(), connected: false, pairing: null, lastError: null, qr: null, wantCode: false };
 const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
 const anthropic = new Anthropic();                                // reads ANTHROPIC_API_KEY
+
+// ---------- which model does what (models.json, ships with the bot; missing = Sonnet everywhere) ----------
+// Features: claude, aap, breaking, auto (Duvel, verjaardag, krant), gemist, oordeel. Haiku only after a side-by-side test.
+function modelFor(feature) {
+  try { const m = JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8'))[feature]; if (m) return m; } catch {}
+  return CFG.model;
+}
+const thinkingFor = (model) => (/haiku/.test(model) ? undefined : { type: 'between_tools' });   // Sonnet 5.5 thinks by default
+
+// ---------- cost per feature and model (data/usage_models.json), read with /kosten ----------
+const USAGE_MODELS_FILE = join(DATA_DIR, 'usage_models.json');
+const PRICE = {                                                   // $ per million tokens, Oct 2026
+  haiku: { in: 0.10, out: 0.50, cr: 0.01, cw: 0.125 },
+  sonnet: { in: 2, out: 10, cr: 0.10, cw: 2.5 },
+  opus: { in: 4, out: 20, cr: 0.20, cw: 5 },
+};
+const SEARCH_USD = 0.01;                                          // per web search
+function featureFromStack() {
+  const st = String(new Error().stack || '');
+  if (/invoer\.mjs/.test(st)) return 'invoer';
+  if (/trader\.mjs/.test(st)) return 'beleggen';
+  if (/autopost\.mjs/.test(st)) return 'auto';
+  return 'overig';
+}
+function trackUsage(feature, model, u = {}) {
+  let all = {};
+  try { all = existsSync(USAGE_MODELS_FILE) ? JSON.parse(readFileSync(USAGE_MODELS_FILE, 'utf8')) : {}; } catch {}
+  const m = new Date().toISOString().slice(0, 7);
+  const key = `${feature}|${model}`;
+  const r = ((all[m] ||= {})[key] ||= { calls: 0, in: 0, out: 0, cache_read: 0, cache_write: 0, searches: 0, usd: 0 });
+  const p = PRICE[(String(model).match(/haiku|sonnet|opus/) || ['sonnet'])[0]];
+  r.calls += 1; r.in += u.input_tokens || 0; r.out += u.output_tokens || 0;
+  r.cache_read += u.cache_read_input_tokens || 0; r.cache_write += u.cache_creation_input_tokens || 0;
+  r.searches += u.server_tool_use?.web_search_requests || 0;
+  r.usd = +((r.in * p.in + r.out * p.out + r.cache_read * p.cr + r.cache_write * p.cw) / 1e6 + r.searches * SEARCH_USD).toFixed(4);
+  try { writeFileSync(USAGE_MODELS_FILE + '.tmp', JSON.stringify(all)); renameSync(USAGE_MODELS_FILE + '.tmp', USAGE_MODELS_FILE); } catch {}
+}
+{ const create = anthropic.messages.create.bind(anthropic.messages);    // every call, from every module, is counted
+  anthropic.messages.create = async (req, opts) => {
+    const { _feature, ...body } = req;
+    const res = await create(body, opts);
+    try { trackUsage(_feature || featureFromStack(), body.model, res.usage); } catch {}
+    return res;
+  }; }
+function costReport() {
+  let all = {};
+  try { all = JSON.parse(readFileSync(USAGE_MODELS_FILE, 'utf8')); } catch { return 'Nog niets gemeten.'; }
+  const months = Object.keys(all).sort().slice(-2);
+  return months.map((m) => {
+    const rows = Object.entries(all[m]).sort((a, b) => b[1].usd - a[1].usd).map(([k, r]) => {
+      const [f, model] = k.split('|');
+      const tot = r.in + r.cache_read + r.cache_write;
+      const hit = tot ? Math.round(100 * r.cache_read / tot) : 0;
+      return `• ${f} (${model.replace('claude-', '')}): ${r.calls}×, $${r.usd.toFixed(3)}, cache ${hit}%`;
+    });
+    const sum = Object.values(all[m]).reduce((s, r) => s + r.usd, 0);
+    return `${m}: $${sum.toFixed(2)}\n${rows.join('\n')}`;
+  }).join('\n\n');
+}
 const persona = readFileSync(join(HERE, 'persona.md'), 'utf8');
 
 // ---------- club data ----------
@@ -90,7 +150,7 @@ function saveHistory() {
 function remember(jid, name, text) {
   const h = history.get(jid) || [];
   h.push({ name, text: text.slice(0, 1000) });
-  while (h.length > CFG.historySize) h.shift();
+  if (h.length > CFG.historySize) h.splice(0, h.length - CFG.historyTrimTo);   // drop 20 at once (see askClaude: cache)
   history.set(jid, h);
   saveHistory();
 }
@@ -233,8 +293,9 @@ async function monkeyLine(jid, instruction) {
     const h = (history.get(jid) || []).slice(-8).map((m) => `${m.name}: ${m.text}`).join('\n');
     let own = '';
     try { const L = trader?.ledger(); if (L) own = [...new Set(L.orders.filter((o) => o.bot === 'Aap' && o.status !== 'failed').slice(-10).map((o) => o.name))].join(', '); } catch {}
+    const model = modelFor('aap');
     const res = await anthropic.messages.create({
-      model: CFG.model, max_tokens: 300, thinking: { type: 'between_tools' },     // no thinking: short and fast
+      _feature: 'aap', model, max_tokens: 300, thinking: thinkingFor(model),     // no thinking: short and fast
       system: MONKEY_PERSONA.replace('{WORDS}', words.length ? words.join(', ') : 'nog geen enkel woord').replace('{S}', `*${s}*`) +
         (own ? `\nJouw eigen aandelen nu (mag je trots noemen): ${own}.` : ''),
       messages: [{ role: 'user', content: `Laatste berichten in de chat:\n${h || '(geen)'}\n\n${instruction}\n\nAntwoord als de aap, over het onderwerp van het gesprek.` }],
@@ -282,8 +343,9 @@ async function composeVerdict(f) {
     f.words.length ? `Van elk van hen leer je één woord: ${f.words.map((w) => `'${w.word}' van ${w.from}`).join(', ')}.` : '',
   ].filter(Boolean).join('\n');
   try {
+    const model = modelFor('oordeel');
     const res = await anthropic.messages.create({
-      model: CFG.model, max_tokens: 600, thinking: { type: 'between_tools' },
+      _feature: 'oordeel', model, max_tokens: 600, thinking: thinkingFor(model),
       system: MONKEY_PERSONA.replace('{WORDS}', learned().map((w) => w.word).join(', ') || 'nog geen enkel woord').replace('{S}', '*NVIDIA*'),
       messages: [{ role: 'user', content: `${facts}\n\nSchrijf nu je eindoordeel voor de hele groep. ${f.victims.length
         ? 'Schep op, noem ELKE naam onder jou en zeg dat ze een ad fundum moeten drinken. Gebruik elk nieuw woord één keer, gerust een beetje verkeerd: je bent een aap.'
@@ -344,7 +406,7 @@ async function composeCatchup(jid) {
   let text = '';
   for (let round = 0; round < 3; round++) {
     const res = await anthropic.messages.create({
-      model: CFG.model, max_tokens: 4000,
+      _feature: 'gemist', model: modelFor('gemist'), max_tokens: 4000,
       system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
       tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 3 }],
       messages,
@@ -405,6 +467,7 @@ async function adminCommand(from, text) {
   if (from !== adminJid()) return false;
   if (/^\/(meeting|aap)\b/.test(text)) { await verdictPreview(from); return true; }
   if (/^\/gemist\b/.test(text)) { await catchupPreview(from); return true; }
+  if (/^\/kosten\b/.test(text)) { await sock.sendMessage(from, { text: CLAUDE_TAG + costReport() }); return true; }
   if (catchup && /^(ja|yes|ok|post)\b/.test(text)) { await catchupPost(from); return true; }
   if (catchup && /^opnieuw\b/.test(text)) { catchup = null; await catchupPreview(from); return true; }
   if (catchup && /^(nee|stop)\b/.test(text)) { catchup = null; await sock.sendMessage(from, { text: CLAUDE_TAG + 'Gestopt. Er is niets gepost.' }); return true; }
@@ -636,25 +699,28 @@ async function privateChat(msg, text) {
 
 async function askClaude(jid, asker, question, extra = '', priv = false, images = []) {
   const h = history.get(jid) || [];
-  const transcript = h.map((m) => `${m.name}: ${m.text}`).join('\n');
   const imgNote = images.length ? `Bij dit bericht stuurde ${asker} een afbeelding mee (screenshot of foto): kijk ernaar en reageer erop.\n\n` : '';
-  const prompt =
-             `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
-             (priv
-               ? `Dit is een PRIVÉGESPREK met ${asker}, niet de groep. Eerdere berichten in dit gesprek (oudste eerst):\n${transcript || '(geen)'}\n\n` +
-                 `${asker} schrijft je nu: "${question}"\n\n${extra}${PRIVATE_NOTE}Schrijf alleen je antwoord aan ${asker}.`
-               : `Recente berichten in de groep (oudste eerst):\n${transcript || '(geen)'}\n\n` +
-                 `${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`);
+  // Cache: the history goes in as one block per message, with a cache breakpoint after the last one. The history is
+  // trimmed 20 messages at a time (remember), so the same blocks come back on the next call and are read from the
+  // cache at a tenth of the price. Only what is new since the last answer is paid in full.
+  const head = `Vandaag is het ${new Date().toLocaleDateString('nl-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' })}.\n\n` +
+    (priv ? `Dit is een PRIVÉGESPREK met ${asker}, niet de groep. Eerdere berichten in dit gesprek (oudste eerst):`
+          : 'Recente berichten in de groep (oudste eerst):');
+  const histBlocks = [{ type: 'text', text: head }, ...(h.length ? h.map((m) => ({ type: 'text', text: `${m.name}: ${m.text}` })) : [{ type: 'text', text: '(geen)' }])];
+  histBlocks[histBlocks.length - 1].cache_control = { type: 'ephemeral' };
+  const tail = priv
+    ? `${imgNote}${asker} schrijft je nu: "${question}"\n\n${extra}${PRIVATE_NOTE}Schrijf alleen je antwoord aan ${asker}.`
+    : `${imgNote}${asker} spreekt jou nu aan met: "${question}"\n\n${extra}Schrijf alleen je antwoord voor in de groep.`;
   const messages = [{
     role: 'user',
-    content: images.length
-      ? [...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } })), { type: 'text', text: imgNote + prompt }]
-      : prompt,
+    content: [...histBlocks,
+      ...images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } })),
+      { type: 'text', text: tail }],
   }];
   let text = '';
   for (let round = 0; round < 4; round++) {
     const res = await anthropic.messages.create({
-      model: CFG.model,
+      _feature: 'claude', model: modelFor('claude'),
       max_tokens: 4000,
       system: [
         { type: 'text', text: persona },
@@ -984,8 +1050,9 @@ async function composeBreaking(hits) {
       'Vertel nooit dat of hoe vaak je zocht. ' +
       'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
     for (let round = 0; round < 3; round++) {
+      const model = modelFor('breaking');
       const res = await anthropic.messages.create({
-        model: CFG.model, max_tokens: 1500, thinking: { type: 'between_tools' },
+        _feature: 'breaking', model, max_tokens: 1500, thinking: thinkingFor(model),
         system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
         tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
         messages,
@@ -1015,8 +1082,9 @@ if (pw) {
 
 // ---------- phase 2/3: Claude and the aap invest, automatic messages, pdfs (all optional) ----------
 async function composeShort(prompt) {
+  const model = modelFor('auto');
   const res = await anthropic.messages.create({
-    model: CFG.model, max_tokens: 600, thinking: { type: 'between_tools' },
+    _feature: 'auto', model, max_tokens: 600, thinking: thinkingFor(model),
     system: [{ type: 'text', text: persona }, { type: 'text', text: club.summary, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: prompt }],
   });
