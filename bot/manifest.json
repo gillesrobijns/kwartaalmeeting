@@ -1,9 +1,9 @@
 {
- "version": "20261007-1444",
+ "version": "20261008-0719",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "03cfe9af7f9463fb1b617f48b531b170d8f3859d379a75f75309c91ef6ee8814"
+   "sha256": "a2e88dcb631ead7a4d71a96a88eaa65425cec99d45b525777f9ff5263b78f3a2"
   },
   {
    "name": "clubdata.mjs",
@@ -11,7 +11,7 @@
   },
   {
    "name": "updater.mjs",
-   "sha256": "53cbea69a37d7bd410709cda71e03a74b795ece2f6ffc18006593cc2215abb00"
+   "sha256": "ea2ef2b70327bb2e952511a283bdf76f9ed74f2eb3e38dfd76c88a9289470eaf"
   },
   {
    "name": "pricewatch.mjs",
@@ -48,6 +48,14 @@
   {
    "name": "universe.json",
    "sha256": "77ce7488ae77b7e2c01af74d39b821aa9c4831f2cc2f648573a5f376ec7df750"
+  },
+  {
+   "name": "invoer.mjs",
+   "sha256": "a18fa164c75d1e00f38f53022b568658aedbe5bf4d485a4f7120230265ac94de"
+  },
+  {
+   "name": "invoer_config.json",
+   "sha256": "b8fd0c0507b1bcf67d55483400263421b63997554c22f8fe940d3ff4a554368a"
   }
  ]
 }
