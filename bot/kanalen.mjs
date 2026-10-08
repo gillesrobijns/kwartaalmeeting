@@ -32,7 +32,7 @@ export function createKanalen({ invoer, getSock, log, adminJid, claudeTag = 'ðŸ¤
   const FILE = join(dataDir, 'kanalen.json');
   const load = () => { try { return existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf8')) : {}; } catch { return {}; } };
   let ks = load();
-  ks.tries ||= {}; ks.formLast ||= null;
+  ks.tries ||= {}; ks.nudged ||= {};
   const saveKs = () => { writeFileSync(`${FILE}.tmp`, JSON.stringify(ks, null, 1)); renameSync(`${FILE}.tmp`, FILE); };
   const admin = (text) => { const a = adminJid(); if (a) return getSock().sendMessage(a, { text: claudeTag + text }).catch(() => {}); };
   const dayDiff = (a, b) => Math.abs((new Date(`${a}T12:00:00Z`) - new Date(`${b}T12:00:00Z`)) / 864e5);
@@ -332,10 +332,21 @@ export function createKanalen({ invoer, getSock, log, adminJid, claudeTag = 'ðŸ¤
     if (!jid) { admin(`ðŸ“¨ Er kwam een broker-melding voor ${member} binnen, maar ik ken ${member === 'Gilles' ? 'je' : 'zijn'} WhatsApp-nummer niet. Niets mee gedaan.`); return 'done'; }
     if (state.pending[jid] && Date.now() - state.pending[jid].at < 3 * 3600 * 1000) return 'later';   // eerst het lopende gesprek afmaken
     const inputs = (m.attachments || []).map((a) => fileInput({ name: a.name, mime: a.mime, data: Buffer.from(a.data, 'base64') })).filter((f) => f?.img);
+    if (!I.budgetOk(jid)) return 'later';                             // ook nodig om de dagteller te starten
     const r = await I.readSmart({ member, text: newPart({ ...m, reply: false }), imgs: inputs.map((f) => f.img) }, jid);
     I.saveState();
     if (!r) return 'retry';
-    if (!r.is_transactie || !r.rijen?.length) { log(`kanalen: melding zonder transactie (${m.subject})`); return 'done'; }
+    if (!r.is_transactie || !r.rijen?.length) {
+      // Bolero mailt sinds eind 2025 alleen "er staat een nieuw document klaar", zonder details: dan een seintje
+      const broker = brokerOf(m);
+      const hay = `${m.subject} ${(m.body || '').slice(0, 3000)}`;
+      if (broker !== 'Je broker' && /(uittreksel|borderel|afrekening|document|order|uitvoering|transactie|execution|trade|confirmation)/i.test(hay)
+          && Date.now() - (ks.nudged[member] || 0) > 6 * 3600 * 1000) {
+        ks.nudged[member] = Date.now(); saveKs();
+        await I.send(jid, `ðŸ“¨ ${broker} meldt dat er een nieuw document klaarstaat. Heb je gehandeld? Stuur me het borderel (pdf) of een screenshot, dan kijk ik of het al in je sheet staat en zet ik het erin.`);
+      } else log(`kanalen: melding zonder transactie (${m.subject})`);
+      return 'done';
+    }
     await I.step(jid, { member, r, tries: 0, via: 'brokermelding' }, `ðŸ“¨ ${brokerOf(m)} meldt een transactie.\n\n`);
     return 'done';
   }
@@ -378,7 +389,7 @@ export function createKanalen({ invoer, getSock, log, adminJid, claudeTag = 'ðŸ¤
       lastErr = '';
       for (const ev of out.events || []) formEvent(ev);
       for (const m of out.mails || []) {
-        try { await handleMail(m); } catch (e) { log('kanalen mail:', e.message); }
+        try { await handleMail(m); } catch (e) { log('kanalen mail:', e.stack || e.message); }
       }
     } catch (e) { if (e.message !== lastErr) log('kanalen inbox:', e.message); lastErr = e.message; }
     finally { polling = false; }
