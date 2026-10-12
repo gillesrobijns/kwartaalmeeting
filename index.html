@@ -3310,7 +3310,10 @@ function renderBots() {
   const ab = document.getElementById('mvm-af-badge');
   if (!aap) {
     if (ab) ab.textContent = '';
-    afEl.innerHTML = '<div class="mvm-empty">De aap deed nog niet mee in dit kwartaal.</div>';
+    // Public build: the running quarter is locked until the meeting, so the last visible quarter predates the aap
+    const keys = (typeof _availableKeys !== 'undefined' && _availableKeys) || [];
+    const locked = keys.length && CURRENT_QUARTER === keys[keys.length - 1] && B.start_date > String(q.end_date || '').slice(0, 10);
+    afEl.innerHTML = '<div class="mvm-empty">' + (locked ? 'Wie onder de aap staat, blijft geheim tot de kwartaalmeeting.' : 'De aap deed nog niet mee in dit kwartaal.') + '</div>';
   } else {
     const rows = (q.quarterly_returns || []).filter(r => !r.bot && r.return_pct != null)
       .map(r => ({ name: r.member, d: (r.return_pct - aap.return_pct) * 100 })).sort((a, b) => b.d - a.d);
