@@ -2119,307 +2119,201 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
   </div>
 
   <style>
-    /* ── Uitleg tab ──────────────────────────────────────── */
-    .uitleg-section { margin-bottom: 1.5rem; }
-    .uitleg-section h3 {
-      font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.8px; color: var(--text-muted); margin: 0 0 0.75rem;
+    /* ── Hoe werkt het? (vraag per vraag) — HW-FAQ-V1 ── */
+    #page-uitleg .hw { display: grid; grid-template-columns: minmax(230px, 300px) 1fr; gap: 1.25rem; align-items: start; }
+    #page-uitleg .hw-qs { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 1rem; }
+    #page-uitleg .hw-q {
+      display: flex; align-items: center; gap: 0.6rem; width: 100% !important; height: auto !important;
+      padding: 0.55rem 0.75rem; border: 0; border-radius: 8px; background: transparent;
+      color: var(--text); font: inherit; font-size: 0.82rem; font-weight: 500; text-align: left; line-height: 1.3;
+      cursor: pointer; transition: background .15s, color .15s;
     }
-    .pipeline-flow {
-      display: flex; align-items: stretch; gap: 0; flex-wrap: nowrap;
-      overflow-x: auto; padding-bottom: 0.5rem;
+    #page-uitleg .hw-q:hover { background: var(--table-hover); }
+    #page-uitleg .hw-q.on { background: rgba(46,139,87,0.12); color: var(--green); font-weight: 700; }
+    #page-uitleg .hw-q svg { width: 16px; height: 16px; flex: none; opacity: 0.8; }
+    #page-uitleg .hw-q .hw-short { display: none; }
+    #page-uitleg .hw-ans { min-height: 380px; }
+    #page-uitleg .hw-ans[hidden] { display: none; }
+    #page-uitleg .hw-ans h3 { font-size: 1.15rem; font-weight: 800; color: var(--text); margin: 0.1rem 0 0.5rem; }
+    #page-uitleg .hw-lead { font-size: 0.9rem; line-height: 1.6; color: var(--text); margin: 0 0 1rem; max-width: 62ch; }
+    #page-uitleg .hw-rows { margin: 0; border-top: 1px solid var(--border); }
+    #page-uitleg .hw-row { display: grid; grid-template-columns: 210px 1fr; gap: 1rem; padding: 0.7rem 0; border-bottom: 1px solid var(--border); }
+    #page-uitleg .hw-row dt { font-size: 0.82rem; font-weight: 700; color: var(--text); line-height: 1.5; }
+    #page-uitleg .hw-row dd { margin: 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-muted); max-width: 62ch; }
+    #page-uitleg .hw-soon {
+      display: inline-block; margin-left: 0.35rem; padding: 1px 7px; border-radius: 99px; vertical-align: 1px;
+      font-size: 0.66rem; font-weight: 700; color: #854F0B; background: #FAEEDA;
     }
-    .pipeline-step {
-      flex: 1; min-width: 130px; background: var(--card-bg);
-      border: 1px solid var(--border); border-radius: 10px;
-      padding: 1rem 0.9rem; position: relative;
-    }
-    .pipeline-step + .pipeline-step { margin-left: 2.2rem; }
-    .pipeline-step::after {
-      content: "→";
-      position: absolute; right: -1.6rem; top: 50%;
-      transform: translateY(-50%);
-      font-size: 1.1rem; font-weight: 700;
-      color: var(--text-muted); z-index: 1;
-    }
-    .pipeline-step:last-child::after { display: none; }
-    .pipeline-step-icon {
-      font-size: 1.6rem; margin-bottom: 0.4rem; display: block;
-    }
-    .pipeline-step-title {
-      font-size: 0.82rem; font-weight: 700; color: var(--navy);
-      margin-bottom: 0.3rem;
-    }
-    [data-theme="dark"] .pipeline-step-title { color: var(--text); }
-    .pipeline-step-desc {
-      font-size: 0.72rem; color: var(--text-muted); line-height: 1.45;
-    }
-    .pipeline-step.step-input { border-left: 3px solid #3B82F6; }
-    .pipeline-step.step-process { border-left: 3px solid var(--green); }
-    .pipeline-step.step-output { border-left: 3px solid var(--gold); }
+    [data-theme="dark"] #page-uitleg .hw-soon { color: #FAC775; background: rgba(250,199,117,0.14); }
+    #page-uitleg .hw-foot { font-size: 0.85rem; line-height: 1.55; color: var(--text-muted); margin: 0.9rem 0 0; max-width: 62ch; }
+    #page-uitleg .hw-foot a { color: var(--green); font-weight: 600; cursor: pointer; text-decoration: none; }
+    #page-uitleg .hw-foot a:hover { text-decoration: underline; }
+    #page-uitleg q { quotes: "\201C" "\201D"; font-style: normal; color: var(--text); }
 
-    .uitleg-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
+    @media (max-width: 900px) {
+      #page-uitleg .hw { grid-template-columns: 1fr; gap: 0.9rem; }
+      #page-uitleg .hw-qs { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+      #page-uitleg .hw-q {
+        width: auto !important; padding: 0.4rem 0.8rem; border-radius: 99px; font-size: 0.8rem;
+        border: 1px solid var(--border); background: var(--card-bg); gap: 0.4rem;
+      }
+      #page-uitleg .hw-q.on { border-color: var(--green); }
+      #page-uitleg .hw-q svg { width: 14px; height: 14px; }
+      #page-uitleg .hw-q .hw-long { display: none; }
+      #page-uitleg .hw-q .hw-short { display: inline; }
+      #page-uitleg .hw-ans { min-height: 0; }
+      #page-uitleg .hw-ans h3 { font-size: 1.05rem; }
+      #page-uitleg .hw-row { grid-template-columns: 1fr; gap: 0.15rem; }
     }
-    .uitleg-card {
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 10px; padding: 1rem 1.1rem;
-    }
-    .uitleg-card-header {
-      display: flex; align-items: center; gap: 0.55rem;
-      margin-bottom: 0.65rem;
-    }
-    .uitleg-card-icon { font-size: 1.1rem; }
-    .uitleg-card-title {
-      font-size: 0.82rem; font-weight: 700; color: var(--text);
-    }
-    .uitleg-card ul {
-      list-style: none; margin: 0; padding: 0;
-    }
-    .uitleg-card ul li {
-      font-size: 0.74rem; color: var(--text-muted); line-height: 1.5;
-      padding: 0.18rem 0; border-bottom: 1px solid var(--border);
-      display: flex; align-items: flex-start; gap: 0.4rem;
-    }
-    .uitleg-card ul li:last-child { border-bottom: none; }
-    .uitleg-card ul li .li-icon { flex-shrink: 0; margin-top: 1px; }
-
-    .task-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-    .task-table th {
-      text-align: left; padding: 0.5rem 0.75rem;
-      background: var(--navy); color: #fff;
-      font-weight: 600; font-size: 0.7rem; letter-spacing: 0.4px;
-    }
-    .task-table th:first-child { border-radius: 6px 0 0 0; }
-    .task-table th:last-child { border-radius: 0 6px 0 0; }
-    .task-table td {
-      padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border);
-      color: var(--text); vertical-align: top;
-    }
-    .task-table tr:last-child td { border-bottom: none; }
-    .task-table tr:hover td { background: var(--table-hover); }
-    .task-badge {
-      display: inline-block; font-size: 0.65rem; font-weight: 700;
-      padding: 0.15rem 0.45rem; border-radius: 4px; white-space: nowrap;
-    }
-    .badge-green { background: rgba(46,139,87,0.12); color: var(--green); }
-    .badge-blue  { background: rgba(59,130,246,0.12); color: #3B82F6; }
-    .badge-amber { background: rgba(251,191,36,0.12); color: #B45309; }
-    [data-theme="dark"] .badge-amber { color: #FCD34D; }
-
-    .rebuild-steps {
-      display: flex; flex-direction: column; gap: 0.5rem;
-    }
-    .rebuild-step {
-      display: flex; align-items: flex-start; gap: 0.75rem;
-      background: var(--card-bg); border: 1px solid var(--border);
-      border-radius: 8px; padding: 0.7rem 0.9rem;
-    }
-    .rebuild-num {
-      flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
-      background: var(--navy); color: #fff;
-      font-size: 0.7rem; font-weight: 800;
-      display: flex; align-items: center; justify-content: center;
-    }
-    .rebuild-text { font-size: 0.75rem; color: var(--text); line-height: 1.5; }
-    .rebuild-text strong { color: var(--text); }
-    .rebuild-text code {
-      font-family: monospace; font-size: 0.72rem;
-      background: rgba(27,42,74,0.08); border-radius: 3px;
-      padding: 0.1rem 0.3rem;
-    }
-    [data-theme="dark"] .rebuild-text code { background: rgba(255,255,255,0.08); }
   </style>
 
   <div class="card" style="padding:1.5rem;">
+    <div class="hw">
+      <div class="hw-qs" role="tablist" aria-label="Vragen">
+        <button class="hw-q" role="tab" onclick="hwShow(0)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14L21 3M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1L21 3"/></svg><span class="hw-long">Hoe geef ik een transactie door?</span><span class="hw-short">Doorgeven</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg><span class="hw-long">Wanneer zie ik het in het dashboard?</span><span class="hw-short">Wanneer</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 12l5 5L22 7M2 12l5 5m5-5l5-5"/></svg><span class="hw-long">Klopt mijn sheet?</span><span class="hw-short">Nakijken</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(3)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V8a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8l-4 3"/><path d="M9.5 11h.01M14.5 11h.01"/></svg><span class="hw-long">Wat kan ik aan Claude vragen?</span><span class="hw-short">Claude</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(4)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3H4a4 4 0 0 0 2-3v-3a7 7 0 0 1 4-6"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg><span class="hw-long">Welke berichten komen er vanzelf?</span><span class="hw-short">Vanzelf</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 3v4M9.5 12h.01M14.5 12h.01M10 16h4"/></svg><span class="hw-long">Wat doen Claude en de aap?</span><span class="hw-short">Claude &amp; aap</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(6)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5L5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/></svg><span class="hw-long">Hoe wordt mijn rendement berekend?</span><span class="hw-short">Rendement</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(7)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6h10v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M16 9h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 10h10"/></svg><span class="hw-long">Wie trakteert de Duvels?</span><span class="hw-short">Duvels</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(8)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg><span class="hw-long">Wat ziet de buitenwereld?</span><span class="hw-short">Publiek</span></button>
+        <button class="hw-q" role="tab" onclick="hwShow(9)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 16a5 5 0 1 1 6 0a3.5 3.5 0 0 0-1 3a2 2 0 0 1-4 0a3.5 3.5 0 0 0-1-3"/><path d="M9.7 17h4.6"/></svg><span class="hw-long">Ik heb een idee. Wat nu?</span><span class="hw-short">Idee</span></button>
+      </div>
 
-    <!-- ── 1. Pipeline overview ──────────────────── -->
-    <div class="uitleg-section">
-      <h3>Pipeline overzicht</h3>
-      <div class="pipeline-flow">
+      <div class="hw-panels">
 
-        <div class="pipeline-step step-input">
-          <span class="pipeline-step-icon">📥</span>
-          <div class="pipeline-step-title">Invoer</div>
-          <div class="pipeline-step-desc">
-            Ingevulde Excel-templates per lid<br>
-            Google Sheets exports<br>
-            Handmatige koersprijzen (benchmarks)<br>
-            Prijscache (Yahoo Finance)
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel">
+          <h3>Hoe geef ik een transactie door?</h3>
+          <p class="hw-lead">Alles komt in je eigen sheet terecht. Die blijft de enige bron: wat er niet in staat, telt niet mee. Je vult hem zelf in, of je laat Claude het doen.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Je sheet</dt><dd>Zelf invullen, zoals altijd.</dd></div>
+            <div class="hw-row"><dt>WhatsApp</dt><dd>Stuur Claude privé een screenshot van je broker, of typ wat je deed: <q>kocht 15 ASML voor 9.214 euro</q>. Hij toont de regel zoals hij hem zal ingeven en vraagt of het klopt. Jij antwoordt <q>ja</q>.</dd></div>
+            <div class="hw-row"><dt>Export van je broker</dt><dd>Stuur Claude privé het overzicht of de export van je broker (csv, Excel of pdf). Hij vergelijkt elke regel met je sheet en vult aan wat ontbreekt.</dd></div>
+            <div class="hw-row"><dt>Mail<span class="hw-soon">binnenkort</span></dt><dd>Een screenshot, een borderel of gewoon een zin mailen. Vraag Claude het adres.</dd></div>
+            <div class="hw-row"><dt>Seintje van je broker<span class="hw-soon">binnenkort</span></dt><dd>Laat de mails van je broker doorsturen. Staan de details erin, dan vraagt Claude je op WhatsApp of hij de transactie mag ingeven.</dd></div>
+            <div class="hw-row"><dt>Formulier op je gsm<span class="hw-soon">binnenkort</span></dt><dd>Een persoonlijke link naar een kort formulier. Stuur Claude privé <q>/formulier</q>.</dd></div>
+          </dl>
+          <p class="hw-foot">Vergist? Stuur Claude <q>zet die laatste terug</q>. Tot de maandagscan haalt hij de laatste regel weer uit je sheet. Krijg je dividend, dan feliciteert Claude je op de betaaldag en vraagt hij hoeveel er netto binnenkwam.</p>
+        </article>
 
-        <div class="pipeline-step step-process">
-          <span class="pipeline-step-icon">⚙️</span>
-          <div class="pipeline-step-title">Inlezen</div>
-          <div class="pipeline-step-desc">
-            <code style="font-size:0.68rem;font-family:monospace">ingest.py</code><br>
-            Leest transacties + dividenden uit templates; past data-correcties toe uit config.py
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Wanneer zie ik het in het dashboard?</h3>
+          <p class="hw-lead">Eén keer per week worden alle sheets ingelezen. Daarna volgen de cijfers vanzelf.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Maandag 9u</dt><dd>Alle tien de sheets worden gelezen. Je krijgt een mail met wat er nieuw of veranderd is, en met je eigen portefeuille aan de koersen van die dag.</dd></div>
+            <div class="hw-row"><dt>Vrijdag 10u</dt><dd>Antwoorden op die mail worden nagekeken en fouten rechtgezet. Daarna wordt het dashboard herbouwd.</dd></div>
+            <div class="hw-row"><dt>Vrijdag 18u</dt><dd>Het publieke dashboard wordt bijgewerkt.</dd></div>
+            <div class="hw-row"><dt>Na het kwartaal</dt><dd>De kwartaalcijfers, truien en punten worden onthuld op de meeting. Tot dan blijft dat kwartaal op slot in het publieke dashboard.</dd></div>
+          </dl>
+        </article>
 
-        <div class="pipeline-step step-process">
-          <span class="pipeline-step-icon">💶</span>
-          <div class="pipeline-step-title">Koersen ophalen</div>
-          <div class="pipeline-step-desc">
-            <code style="font-size:0.68rem;font-family:monospace">prices.py</code><br>
-            Yahoo Finance → cache → handmatige override → transactieprijs (fallback)
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Klopt mijn sheet?</h3>
+          <p class="hw-lead">Stuur Claude privé een screenshot van je posities bij je broker, met <q>klopt mijn sheet?</q>. Hij vergelijkt het aantal stuks per aandeel met wat je sheet zegt.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Wat je terugkrijgt</dt><dd>Welke aandelen meer of minder zijn dan in je sheet, en welke ontbreken. Aantallen of bedragen noemt hij nooit.</dd></div>
+            <div class="hw-row"><dt>Twee brokers</dt><dd>Stuur binnen het halfuur een tweede screenshot. Claude telt die erbij.</dd></div>
+            <div class="hw-row"><dt>De mail van maandag</dt><dd>Toont je eigen portefeuille zoals het systeem ze kent. Ook een goede controle.</dd></div>
+          </dl>
+        </article>
 
-        <div class="pipeline-step step-process">
-          <span class="pipeline-step-icon">📐</span>
-          <div class="pipeline-step-title">Berekeningen</div>
-          <div class="pipeline-step-desc">
-            <code style="font-size:0.68rem;font-family:monospace">calculations.py</code><br>
-            Kwartaal-, YTD- en lifetimerendement per lid; Modified Dietz; trui- en puntenranking
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Wat kan ik aan Claude vragen?</h3>
+          <p class="hw-lead">Claude is lid 11 en zit in de WhatsApp-groep. Hij antwoordt als je hem aanspreekt (<q>Claude</q>, <q>@Claude</q>, <q>Jean-Claude</q> of gewoon <q>Jean</q>) of als je op zijn bericht antwoordt.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>In de groep</dt><dd>Vragen over een aandeel, een fonds of het nieuws. Hij kijkt eerst de koers en het nieuws van vandaag na.</dd></div>
+            <div class="hw-row"><dt>Debat</dt><dd>Begin je bericht met <q>debat ASML</q> of <q>bull bear Nvidia</q>. Claude geeft de redenen om te kopen, de aap de redenen om het niet te doen, en daarna volgt een poll.</dd></div>
+            <div class="hw-row"><dt>Screenshot</dt><dd>Zet <q>Claude</q> in het bijschrift van een foto en hij kijkt ernaar. In de groep noemt hij nooit bedragen.</dd></div>
+            <div class="hw-row"><dt>Privé</dt><dd>Gewoon chatten (tien berichten per dag), transacties doorgeven en je sheet laten nakijken.</dd></div>
+          </dl>
+          <p class="hw-foot">Claude kent alleen het publieke dashboard. Hij weet dus niet hoeveel geld je hebt, en hij noemt nooit iemands posities of plaats in de ranking.</p>
+        </article>
 
-        <div class="pipeline-step step-process">
-          <span class="pipeline-step-icon">🤖</span>
-          <div class="pipeline-step-title">AI-commentaar</div>
-          <div class="pipeline-step-desc">
-            Optioneel: Claude genereert verhalende tekst per slide als <code style="font-size:0.68rem;font-family:monospace">ANTHROPIC_API_KEY</code> is ingesteld
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Welke berichten komen er vanzelf?</h3>
+          <p class="hw-lead">De groep blijft rustig: hoogstens één automatisch bericht per dag, plus een bericht over de koersen als er echt iets gebeurt.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Ochtendbericht</dt><dd>Vanaf 08:30, over de slotkoersen van de vorige beursdag. Alleen als een clubaandeel 5% of meer lager sloot: welk aandeel, wie het heeft en waarom. Op rustige dagen komt er niets.</dd></div>
+            <div class="hw-row"><dt>Crashalarm</dt><dd>Staat een clubaandeel overdag 15% of meer lager, dan volgt meteen één bericht.</dd></div>
+            <div class="hw-row"><dt>Claude en de aap</dt><dd>Hun aankopen en verkopen, met de reden erbij.</dd></div>
+            <div class="hw-row"><dt>Duvel-herinnering</dt><dd>Na het einde van het kwartaal, elke dinsdag met wie nog niet invulde, en de dag voor de meeting.</dd></div>
+            <div class="hw-row"><dt>Aankoop-verjaardag</dt><dd>Een aandeel dat je al één, twee of drie jaar hebt, krijgt een felicitatie of een steek.</dd></div>
+            <div class="hw-row"><dt>De Kwartaalkrant</dt><dd>Na de meeting: het verslag als tekst en als pdf.</dd></div>
+          </dl>
+        </article>
 
-        <div class="pipeline-step step-output">
-          <span class="pipeline-step-icon">📤</span>
-          <div class="pipeline-step-title">Uitvoer</div>
-          <div class="pipeline-step-desc">
-            <strong style="font-size:0.7rem">Dashboard</strong> — dit bestand<br>
-            <strong style="font-size:0.7rem">Presentatie</strong> — interactief HTML-diashow<br>
-            <strong style="font-size:0.7rem">JSON/JS</strong> — ruwe data voor hergebruik
-          </div>
-        </div>
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Wat doen Claude en de aap?</h3>
+          <p class="hw-lead">Sinds 7 oktober 2026 beleggen Claude (lid 11) en de beleggende aap (lid 12) mee. Elk kreeg €50.000 virtueel en betaalt €7,50 per transactie, net als wij.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Claude</dt><dd>Volgt zijn eigen strategie en kijkt elke maandag zijn posities na. Hoogstens twee transacties per week, telkens met de reden erbij.</dd></div>
+            <div class="hw-row"><dt>De aap</dt><dd>Verkoopt op de eerste maandag van elk kwartaal alles en koopt tien willekeurige aandelen uit de S&amp;P 500 en de BEL 20, elk even veel.</dd></div>
+            <div class="hw-row"><dt>Koers</dt><dd>Ze beslissen overdag en kopen of verkopen tegen de slotkoers van die dag.</dd></div>
+            <div class="hw-row"><dt>In de ranking</dt><dd>Ze staan erin zonder nummer en dingen niet mee naar truien, punten of Duvels.</dd></div>
+            <div class="hw-row"><dt>Onder de aap</dt><dd>Wie een kwartaal slechter doet dan de aap, krijgt een 🍺 achter zijn naam: ad fundum op de meeting.</dd></div>
+          </dl>
+          <p class="hw-foot">Hun eigen pagina's en het duel vind je onder <a onclick="showPage('bots')">Mens vs machine</a>.</p>
+        </article>
+
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Hoe wordt mijn rendement berekend?</h3>
+          <p class="hw-lead">Je rendement houdt rekening met wanneer je geld instak of eruit haalde. Wie halverwege het kwartaal bijstort, wint of verliest dus niets door dat moment.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Koersen</dt><dd>Slotkoersen van Yahoo Finance, omgerekend naar euro. Een turbo krijgt een berekende koers op basis van het aandeel eronder.</dd></div>
+            <div class="hw-row"><dt>Dividend</dt><dd>Het netto dividend dat je ontvangt, telt mee in je rendement.</dd></div>
+            <div class="hw-row"><dt>Tegen de S&amp;P 500</dt><dd>Wat de index had opgebracht met precies dezelfde stortingen, op dezelfde dagen.</dd></div>
+            <div class="hw-row"><dt>Per jaar</dt><dd>Op je eigen pagina zie je ook wat je lifetime-rendement per jaar betekent.</dd></div>
+          </dl>
+        </article>
+
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Wie trakteert de Duvels?</h3>
+          <p class="hw-lead">Wie als laatste zijn sheet invult voor het kwartaal dat net voorbij is, trakteert een ronde Duvels op de meeting.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Wat telt</dt><dd>Het moment waarop je sheet het laatst veranderde, niet wanneer de scan liep.</dd></div>
+            <div class="hw-row"><dt>Niet ingevuld</dt><dd>Wie niets invult, deelt de ronde met de andere achterblijvers.</dd></div>
+            <div class="hw-row"><dt>Herinneringen</dt><dd>In de groep na het einde van het kwartaal, elke dinsdag, en de dag voor de meeting.</dd></div>
+          </dl>
+          <p class="hw-foot">De volgorde en de stand van alle rondes staan op de <a onclick="showPage('duvel')">Duvelcounter</a>.</p>
+        </article>
+
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Wat ziet de buitenwereld?</h3>
+          <p class="hw-lead">Er is een publieke versie van dit dashboard die je kan delen. Daarin staan geen bedragen: alles staat in procenten of herleid tot een index.</p>
+          <dl class="hw-rows">
+            <div class="hw-row"><dt>Lopend kwartaal</dt><dd>Blijft op slot tot de dag na de meeting, zodat niemand de uitslag vooraf ziet.</dd></div>
+            <div class="hw-row"><dt>Claude</dt><dd>Leest alleen die publieke versie. Daarom kent hij je bedragen niet.</dd></div>
+          </dl>
+        </article>
+
+        <article class="hw-ans" role="tabpanel" hidden>
+          <h3>Ik heb een idee. Wat nu?</h3>
+          <p class="hw-lead">Zeg het tegen Claude, in de groep of privé. Hij stuurt het door naar Gilles, die beslist wat er gebouwd wordt.</p>
+          <p class="hw-foot">Op de <a onclick="showPage('roadmap')">Roadmap</a> zie je wat op de lijst staat, wat in de maak is en wat net klaar is.</p>
+        </article>
 
       </div>
     </div>
-
-    <!-- ── 2. Input / Output detail ──────────────────────── -->
-    <div class="uitleg-section">
-      <h3>Invoer & Uitvoer in detail</h3>
-      <div class="uitleg-grid">
-
-        <div class="uitleg-card" style="border-left:3px solid #3B82F6">
-          <div class="uitleg-card-header">
-            <span class="uitleg-card-icon">📂</span>
-            <span class="uitleg-card-title">Invoerbestanden</span>
-          </div>
-          <ul>
-            <li><span class="li-icon">📄</span><span><strong>Template_Naam_QX_YYYY.xlsx</strong> — ingevuld door elk lid (transacties + dividenden)</span></li>
-            <li><span class="li-icon">📊</span><span><strong>master_transactions.xlsx</strong> — gecombineerde transactiehistorie (alle kwartalen)</span></li>
-            <li><span class="li-icon">💾</span><span><strong>price_cache.json</strong> — gecachte Yahoo Finance-koersen (hergebruik tussen runs)</span></li>
-            <li><span class="li-icon">🖼️</span><span><strong>photos/</strong> — ledenfotos (Voornaam.jpg/.jpeg/.png)</span></li>
-            <li><span class="li-icon">⚙️</span><span><strong>config.py</strong> — leden, tickers, trui-regels, datacorrecties</span></li>
-          </ul>
-        </div>
-
-        <div class="uitleg-card" style="border-left:3px solid var(--gold)">
-          <div class="uitleg-card-header">
-            <span class="uitleg-card-icon">📦</span>
-            <span class="uitleg-card-title">Uitvoerbestanden</span>
-          </div>
-          <ul>
-            <li><span class="li-icon">🌐</span><span><strong>dashboard.html</strong> — dit zelfstandige dashboard (data inline)</span></li>
-            <li><span class="li-icon">🎞️</span><span><strong>slides/Kwartaalmeeting_QX_YYYY_slides.html</strong> — presentatiediadeck voor de vergadering</span></li>
-            <li><span class="li-icon">🗄️</span><span><strong>dashboard_data.json</strong> — volledige historische data (alle kwartalen)</span></li>
-            <li><span class="li-icon">📜</span><span><strong>dashboard_data.js</strong> — JS-module (geëmbed in dashboard.html)</span></li>
-            <li><span class="li-icon">📷</span><span><strong>media/photos.js</strong> — ledenfoto's, geladen door dashboard.html</span></li>
-          </ul>
-        </div>
-
-        <div class="uitleg-card" style="border-left:3px solid var(--green)">
-          <div class="uitleg-card-header">
-            <span class="uitleg-card-icon">🔄</span>
-            <span class="uitleg-card-title">Automatische scans</span>
-          </div>
-          <ul>
-            <li><span class="li-icon">📡</span><span>Chrome leest Google Sheets van elk lid via de gviz CSV-API</span></li>
-            <li><span class="li-icon">🔍</span><span>Vergelijkt met master op volledige sleutel (lid+aandeel+type+stukken+datum) en losse sleutel (lid+aandeel+type+datum)</span></li>
-            <li><span class="li-icon">✏️</span><span><strong>patch_master.py</strong> — voegt nieuwe rijen toe / past gewijzigde rijen bij in master</span></li>
-            <li><span class="li-icon">📧</span><span>Gmail-concepten per lid met overzicht van nieuwe/gewijzigde transacties</span></li>
-            <li><span class="li-icon">⚠️</span><span>Onbekende aandelen worden direct gemarkeerd (config-gap check)</span></li>
-          </ul>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ── 3. Scheduled tasks ──────────────────────────────── -->
-    <div class="uitleg-section">
-      <h3>Geplande taken</h3>
-      <div class="card" style="padding:0;overflow:hidden;border-radius:8px;">
-        <table class="task-table">
-          <thead>
-            <tr>
-              <th>Taak</th>
-              <th>Schema</th>
-              <th>Wat doet het?</th>
-              <th>Uitvoer</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Scan templates</strong></td>
-              <td><span class="task-badge badge-blue">Ma 09:01</span></td>
-              <td style="color:var(--text-muted)">Leest alle 10 Google Sheets; detecteert nieuwe/gewijzigde transacties + dividenden; updatet master; voegt nieuwe aandelen toe aan Instructies-tabs; controleert config-gaps</td>
-              <td style="color:var(--text-muted)">master_transactions.xlsx bijgewerkt · Gmail-concepten per lid · samenvatting aan Gilles</td>
-            </tr>
-            <tr>
-              <td><strong>Bevestigingen verwerken</strong></td>
-              <td><span class="task-badge badge-green">Vr 10:06</span></td>
-              <td style="color:var(--text-muted)">Controleert of er bevestigingsreplies zijn binnengekomen; verwerkt correcties; herbouwt dashboard met bijgewerkte data; stuurt ontvangstbevestigingen</td>
-              <td style="color:var(--text-muted)">dashboard.html herbouwd · ontvangstbevestigingen per e-mail</td>
-            </tr>
-            <tr>
-              <td><strong>Giro dagupdate</strong></td>
-              <td><span class="task-badge badge-amber">Dagelijks 08:06</span></td>
-              <td style="color:var(--text-muted)">Fetcht Scorito Giro-data; controleert herstel/twijfelachtig/uitgevallen status; stuurt e-mail met updates</td>
-              <td style="color:var(--text-muted)">Dagelijkse Giro-e-mail</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ── 4. Dashboard herbouwen ──────────────────────────── -->
-    <div class="uitleg-section" style="margin-bottom:0">
-      <h3>Dashboard herbouwen (elk kwartaal)</h3>
-      <div class="rebuild-steps">
-        <div class="rebuild-step">
-          <div class="rebuild-num">1</div>
-          <div class="rebuild-text"><strong>Verzamel ingevulde templates</strong> in <code>data/transactions_qX_YYYY/</code> en exporteer Google Sheets naar <code>data/gsheet_export.xlsx</code> (optioneel).</div>
-        </div>
-        <div class="rebuild-step">
-          <div class="rebuild-num">2</div>
-          <div class="rebuild-text"><strong>Kopieer het project naar <code>/tmp/</code></strong> — de Cowork-werkmap heeft een schrijflimiet van ~1 MB die grote bestanden kan afkappen.</div>
-        </div>
-        <div class="rebuild-step">
-          <div class="rebuild-num">3</div>
-          <div class="rebuild-text"><strong>Voer de pipeline uit:</strong> <code>python main.py --quarter Q2 --year 2026 --transactions data/transactions_q2_2026/ --output /tmp/output/</code></div>
-        </div>
-        <div class="rebuild-step">
-          <div class="rebuild-num">4</div>
-          <div class="rebuild-text"><strong>Kopieer de uitvoer terug</strong> naar de Cowork-werkmap: <code>dashboard.html</code>, <code>slides.html</code>, en <code>price_cache.json</code>.</div>
-        </div>
-        <div class="rebuild-step">
-          <div class="rebuild-num">5</div>
-          <div class="rebuild-text"><strong>Verifieer</strong> in het dashboard: controleer rendementen, truiwinnaars en benchmarkvergelijking. Pas <code>_MANUAL_PRICES</code> in <code>prices.py</code> aan als benchmarks 0% tonen.</div>
-        </div>
-        <div class="rebuild-step">
-          <div class="rebuild-num">6</div>
-          <div class="rebuild-text"><strong>Presenteer</strong> — open de deck in <code>slides/</code> in Chrome voor de vergadering. Vereist internetverbinding voor de Kamelenrace (Chart.js CDN).</div>
-        </div>
-      </div>
-    </div>
-
   </div>
+  <script>
+  function hwShow(i) {
+    document.querySelectorAll('#page-uitleg .hw-q').forEach(function (b, j) {
+      b.classList.toggle('on', j === i); b.setAttribute('aria-selected', j === i ? 'true' : 'false');
+    });
+    document.querySelectorAll('#page-uitleg .hw-ans').forEach(function (a, j) { a.hidden = j !== i; });
+    try { localStorage.setItem('km_hw_q', String(i)); } catch (e) {}
+  }
+  (function () {
+    var i = 0;
+    try { i = parseInt(localStorage.getItem('km_hw_q') || '0', 10) || 0; } catch (e) {}
+    if (i < 0 || i > 9) i = 0;
+    hwShow(i);
+  })();
+  </script>
 </div>
-
-  </div><!-- .page-content -->
+</div><!-- .page-content -->
 </div><!-- .main -->
 
 
