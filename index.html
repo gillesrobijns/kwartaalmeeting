@@ -613,6 +613,20 @@ body {
   body.sb-collapsed .sb-collapse-btn .sb-ic-r { display: block; }
 }
 
+/* ── Sidebar hover labels (collapsed rail) — SB-TIPS-V1 ── */
+.sb-tip {
+  position: fixed; z-index: 1300; transform: translateY(-50%);
+  background: #111D35; color: #fff; font-size: 12px; font-weight: 600; line-height: 1;
+  padding: 7px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .12s; box-shadow: 0 6px 18px rgba(10,13,26,0.28);
+}
+.sb-tip::before {
+  content: ''; position: absolute; left: -4px; top: 50%; width: 8px; height: 8px;
+  background: inherit; transform: translateY(-50%) rotate(45deg); border-radius: 1px;
+}
+.sb-tip.show { opacity: 1; }
+[data-theme="dark"] .sb-tip { background: #2A3D66; }
+
 /* ── Responsive ──────────────────────────────── */
 /* ── Mobile (≤900px): topbar + off-canvas drawer ── */
 .mobile-topbar, .mobile-backdrop { display: none; }
@@ -1516,20 +1530,20 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
     <div class="sidebar-section">
       <div class="sidebar-section-title">Navigatie</div>
       <ul class="sidebar-nav" id="main-nav">
-        <li><a class="active" onclick="showPage('overview')" data-page="overview" title="Kwartaaloverzicht"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="8" rx="1"/><rect x="4" y="16" width="6" height="4" rx="1"/><rect x="14" y="12" width="6" height="8" rx="1"/><rect x="14" y="4" width="6" height="4" rx="1"/></svg></span> <span class="nav-label" id="nav-overview-label">Kwartaaloverzicht</span></a></li>
-        <li><a onclick="showPage('returns')" data-page="returns" title="Rendementen"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></span> <span class="nav-label">Rendementen</span></a></li>
-        <li><a onclick="showPage('stocks')" data-page="stocks" title="Aandelen"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v4M6 16v4M18 3v3M18 14v7"/><rect x="4" y="8" width="4" height="8" rx="1"/><rect x="16" y="6" width="4" height="8" rx="1"/></svg></span> <span class="nav-label">Aandelen</span></a></li>
-        <li><a onclick="showPage('spreiding')" data-page="spreiding" title="Spreiding"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.2A9 9 0 1 0 20.8 14H10z"/><path d="M14 3.3A9 9 0 0 1 20.7 10H14z"/></svg></span> <span class="nav-label">Spreiding</span></a></li>
-        <li><a onclick="showPage('jerseys')" data-page="jerseys" title="Truien &amp; Punten"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4l6 2v5h-3v8a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-8H3V6l6-2a3 3 0 0 0 6 0"/></svg></span> <span class="nav-label">Truien & Punten</span></a></li>
-        <li><a onclick="showPage('bots')" data-page="bots" title="Mens vs machine"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 3v4M9.5 12h.01M14.5 12h.01M10 16h4"/></svg></span> <span class="nav-label">Mens vs machine</span></a></li>
-        <li><a onclick="showPage('kamelenrace')" data-page="kamelenrace" title="Kamelenrace"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></span> <span class="nav-label">Kamelenrace</span></a></li>
-        <li><a onclick="showPage('duvel')" data-page="duvel" title="Duvelcounter"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6h10v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M16 9h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 10h10"/></svg></span> <span class="nav-label">Duvelcounter</span></a></li>
-        <li><a onclick="showPage('roadmap')" data-page="roadmap" title="Roadmap"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3-5a9 9 0 0 0 6-8a3 3 0 0 0-3-3a9 9 0 0 0-8 6a6 6 0 0 0-5 3"/><path d="M7 14a6 6 0 0 0-3 6a6 6 0 0 0 6-3"/><circle cx="15" cy="9" r="1"/></svg></span> <span class="nav-label">Roadmap</span><span class="nav-dot" aria-hidden="true"></span></a></li>
-        <li><a onclick="showPage('uitleg')" data-page="uitleg" title="Hoe werkt het?"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4"/></svg></span> <span class="nav-label">Hoe werkt het?</span></a></li>
+        <li><a class="active" onclick="showPage('overview')" data-page="overview" data-tip="Kwartaaloverzicht"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6" height="8" rx="1"/><rect x="4" y="16" width="6" height="4" rx="1"/><rect x="14" y="12" width="6" height="8" rx="1"/><rect x="14" y="4" width="6" height="4" rx="1"/></svg></span> <span class="nav-label" id="nav-overview-label">Kwartaaloverzicht</span></a></li>
+        <li><a onclick="showPage('returns')" data-page="returns" data-tip="Rendementen"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg></span> <span class="nav-label">Rendementen</span></a></li>
+        <li><a onclick="showPage('stocks')" data-page="stocks" data-tip="Aandelen"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4v4M6 16v4M18 3v3M18 14v7"/><rect x="4" y="8" width="4" height="8" rx="1"/><rect x="16" y="6" width="4" height="8" rx="1"/></svg></span> <span class="nav-label">Aandelen</span></a></li>
+        <li><a onclick="showPage('spreiding')" data-page="spreiding" data-tip="Spreiding"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.2A9 9 0 1 0 20.8 14H10z"/><path d="M14 3.3A9 9 0 0 1 20.7 10H14z"/></svg></span> <span class="nav-label">Spreiding</span></a></li>
+        <li><a onclick="showPage('jerseys')" data-page="jerseys" data-tip="Truien &amp; Punten"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4l6 2v5h-3v8a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-8H3V6l6-2a3 3 0 0 0 6 0"/></svg></span> <span class="nav-label">Truien & Punten</span></a></li>
+        <li><a onclick="showPage('bots')" data-page="bots" data-tip="Mens vs machine"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="7" width="14" height="12" rx="2"/><path d="M12 3v4M9.5 12h.01M14.5 12h.01M10 16h4"/></svg></span> <span class="nav-label">Mens vs machine</span></a></li>
+        <li><a onclick="showPage('kamelenrace')" data-page="kamelenrace" data-tip="Kamelenrace"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></span> <span class="nav-label">Kamelenrace</span></a></li>
+        <li><a onclick="showPage('duvel')" data-page="duvel" data-tip="Duvelcounter"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6h10v13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M16 9h2a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-2"/><path d="M6 10h10"/></svg></span> <span class="nav-label">Duvelcounter</span></a></li>
+        <li><a onclick="showPage('roadmap')" data-page="roadmap" data-tip="Roadmap"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3-5a9 9 0 0 0 6-8a3 3 0 0 0-3-3a9 9 0 0 0-8 6a6 6 0 0 0-5 3"/><path d="M7 14a6 6 0 0 0-3 6a6 6 0 0 0 6-3"/><circle cx="15" cy="9" r="1"/></svg></span> <span class="nav-label">Roadmap</span><span class="nav-dot" aria-hidden="true"></span></a></li>
+        <li><a onclick="showPage('uitleg')" data-page="uitleg" data-tip="Hoe werkt het?"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 17v.01M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4"/></svg></span> <span class="nav-label">Hoe werkt het?</span></a></li>
       </ul>
     </div>
 
-    <button class="sb-leden-btn" id="sb-leden-btn" onclick="toggleLedenFlyout(event)" title="Leden" aria-label="Leden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85"/></svg></button>
+    <button class="sb-leden-btn" id="sb-leden-btn" onclick="toggleLedenFlyout(event)" data-tip="Leden" aria-label="Leden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.85"/></svg></button>
     <div class="sidebar-section sb-members" id="sb-members">
       <div class="sidebar-section-title">Leden</div>
       <ul class="sidebar-nav" id="members-nav"></ul>
@@ -1565,7 +1579,7 @@ body.privacy-on .eur:hover { filter: blur(5px) !important; cursor: default !impo
     </div>
   </div>
 
-  <button class="sb-collapse-btn" id="sb-collapse-btn" onclick="toggleSidebarCollapse()" title="Menu inklappen" aria-label="Menu in- of uitklappen"><span class="sb-ic-l"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></svg></span><span class="sb-ic-r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7l5 5-5 5M13 7l5 5-5 5"/></svg></span><span class="sb-l">Inklappen</span></button>
+  <button class="sb-collapse-btn" id="sb-collapse-btn" onclick="toggleSidebarCollapse()" data-tip="Menu uitklappen" aria-label="Menu in- of uitklappen"><span class="sb-ic-l"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 7l-5 5 5 5M18 7l-5 5 5 5"/></svg></span><span class="sb-ic-r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7l5 5-5 5M13 7l5 5-5 5"/></svg></span><span class="sb-l">Inklappen</span></button>
 </nav>
 <script>try{if(window.innerWidth>900&&localStorage.getItem('km_sb_collapsed')==='1')document.body.classList.add('sb-collapsed')}catch(e){}</script>
 
@@ -2622,7 +2636,6 @@ function toggleSidebarCollapse(force) {
   const sp = document.getElementById('settings-panel');
   if (sp) sp.classList.remove('open');
   const b = document.getElementById('sb-collapse-btn');
-  if (b) b.title = on ? 'Menu uitklappen' : 'Menu inklappen';
   try { localStorage.setItem('km_sb_collapsed', on ? '1' : '0'); } catch (e) {}
   setTimeout(() => window.dispatchEvent(new Event('resize')), 240);
 }
@@ -2657,7 +2670,7 @@ function _kmUpdateQChip() {
   if (!c || !CURRENT_QUARTER) return;
   const p = String(CURRENT_QUARTER).split('_');
   c.innerHTML = p[0] + '<br>' + String(p[1] || '').slice(2);
-  c.title = p[0] + ' ' + (p[1] || '') + ' — klik om een ander kwartaal te kiezen';
+  c.dataset.tip = p[0] + ' ' + (p[1] || '') + ' · ander kwartaal kiezen';
 }
 const _kmRenderQuarterPicker = renderQuarterPicker;
 renderQuarterPicker = function () { _kmRenderQuarterPicker.apply(this, arguments); _kmUpdateQChip(); };
@@ -2680,8 +2693,35 @@ function updateRoadmapDot(markSeen) {
   let seen = null;
   try { if (markSeen && sig) localStorage.setItem('km_rm_seen', sig); seen = localStorage.getItem('km_rm_seen'); } catch (e) {}
   a.classList.toggle('has-new', !!sig && sig !== seen);
-  a.title = a.classList.contains('has-new') ? 'Roadmap — er is iets nieuws' : 'Roadmap';
+  a.dataset.tip = a.classList.contains('has-new') ? 'Roadmap · er is iets nieuws' : 'Roadmap';
 }
+
+// ── Sidebar hover labels (collapsed rail) — SB-TIPS-V1 ──
+(function () {
+  [['#slides-link', 'Bekijk presentatie'], ['.sb-sync .sync-btn', 'Sync data'], ['.sb-sync .gear-btn', 'Instellingen']]
+    .forEach(([sel, t]) => { const el = document.querySelector(sel); if (el && !el.dataset.tip) el.dataset.tip = t; });
+  const tip = document.createElement('div');
+  tip.className = 'sb-tip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.appendChild(tip);
+  let cur = null;
+  function hide() { tip.classList.remove('show'); cur = null; }
+  document.addEventListener('mouseover', e => {
+    if (!document.body.classList.contains('sb-collapsed')) return hide();
+    const el = e.target.closest('.sidebar [data-tip]');
+    if (!el || el.closest('.sb-members')) return hide();
+    if (el.id === 'sb-leden-btn' && document.body.classList.contains('sb-leden-open')) return hide();
+    if (el === cur) return;
+    cur = el;
+    tip.textContent = el.dataset.tip;
+    const r = el.getBoundingClientRect();
+    tip.style.top = (r.top + r.height / 2) + 'px';
+    tip.style.left = (r.right + 10) + 'px';
+    tip.classList.add('show');
+  });
+  document.addEventListener('mousedown', hide, true);
+  window.addEventListener('scroll', hide, true);
+})();
 
 // ── Navigation ───────────────────────────────────
 function toggleMobileNav(force) {
