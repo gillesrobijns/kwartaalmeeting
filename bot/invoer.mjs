@@ -1,8 +1,9 @@
 // Transacties doorgeven via WhatsApp (alleen in een privégesprek met de bot).
 //
 // Een lid stuurt een screenshot van zijn broker of typt wat hij kocht of verkocht.
-// 1. Haiku leest het (goedkoop). Twijfelt Haiku, kent hij het aandeel niet of klopt er iets niet,
-//    dan leest Sonnet het opnieuw.
+// 1. Het snelle model leest het. Twijfelt het, kent het het aandeel niet of klopt er iets niet,
+//    dan leest het sterke model het opnieuw. Welke modellen: models.json ("invoer_snel", "invoer").
+//    Sinds 21 okt 2026 allebei Opus: dan is er maar één lezing.
 // 2. Claude toont de regel(s) en vraagt "klopt dit?". Het lid zegt ja, of zegt wat er anders moet.
 // 3. Na "ja" zet een Apps Script-webapp (op Gilles' Google-account) de rij in de EIGEN sheet van het lid.
 //    De master blijft alleen via de maandagscan veranderen, dus de sheet blijft de enige bron.
@@ -15,11 +16,16 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 export const MEMBERS = ['Gilles', 'Kevin', 'Robbe', 'Joran', 'Arno', 'Pieter', 'Haakon', 'Jeff', 'Niels', 'Tom'];
-const MODELS = { fast: 'claude-haiku-5-5', strong: 'claude-sonnet-5-5' };
+const MODELS = (() => {                                         // models.json: "invoer" = sterk, "invoer_snel" = eerste lezing
+  const m = { fast: 'claude-haiku-5-5', strong: 'claude-sonnet-5-5' };
+  try { const j = JSON.parse(readFileSync(new URL('./models.json', import.meta.url), 'utf8')); m.strong = j.invoer || m.strong; m.fast = j.invoer_snel || m.fast; } catch {}
+  return m;
+})();
 // $ per miljoen tokens (platform.claude.com/docs/en/about-claude/pricing, okt 2026)
 const PRICE = {
   'claude-haiku-5-5': { in: 0.10, out: 0.50, cr: 0.01, cw: 0.125 },
   'claude-sonnet-5-5': { in: 2, out: 10, cr: 0.10, cw: 2.5 },
+  'claude-opus-5-5': { in: 4, out: 20, cr: 0.20, cw: 5 },
 };
 const LIMITS = { perPersonDay: 25, totalDay: 120 };              // leesbeurten (Haiku + Sonnet samen)
 const PENDING_TTL = 24 * 3600 * 1000;
@@ -161,8 +167,8 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       tools: [TOOL],
       messages: [{ role: 'user', content: parts }],
     };
-    if (model === MODELS.strong) req.thinking = { type: 'between_tools' };   // Sonnet 5.5: geen gedwongen tool_choice
-    else req.tool_choice = { type: 'any' };
+    if (/haiku/.test(model)) req.tool_choice = { type: 'any' };               // Haiku: gedwongen tool
+    else if (/sonnet/.test(model)) req.thinking = { type: 'between_tools' };  // Sonnet 5.5: geen gedwongen tool_choice. Opus: forModel() in bot.mjs
     const res = await anthropic.messages.create(req);
     track(model, res.usage);
     const u = res.usage || {};
@@ -554,6 +560,7 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
 
   async function readSmart(args, jid, forceStrong = false) {
     let r = null;
+    if (MODELS.fast === MODELS.strong) forceStrong = true;         // één model: meteen de sterke lezing, geen tweede pass
     if (!forceStrong) {
       spend(jid);
       try { r = await read({ ...args, model: MODELS.fast }); } catch (e) { log('invoer haiku:', e.status || '', e.message); }
