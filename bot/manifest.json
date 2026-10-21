@@ -1,9 +1,9 @@
 {
- "version": "20261013-1905",
+ "version": "20261021-0736",
  "files": [
   {
    "name": "bot.mjs",
-   "sha256": "8f5e1b6c65355e36b322a6d37d9e6e8f72128574a6c749cb8c8d08de05e63ba9"
+   "sha256": "bf757e03f64abec62b690d3ca2e293a5580c7a960668eae7917cada251b1f320"
   },
   {
    "name": "clubdata.mjs",
@@ -51,7 +51,7 @@
   },
   {
    "name": "invoer.mjs",
-   "sha256": "5d399965467a1e7fb062c4223f271fb8784a7d76d61fa2604cfb4736aaabe52f"
+   "sha256": "9fbc94cb8c2a39c1c232ec36a944685ba45bfb29e31e8d6718ff1dd085703481"
   },
   {
    "name": "invoer_config.json",
@@ -59,7 +59,7 @@
   },
   {
    "name": "models.json",
-   "sha256": "f3ce0de4a9e1395a045fdaa4187636e5ceb5cca273c68b2a796c6b7ebeeea2e4"
+   "sha256": "5b709341ad1d5f6edf54671f6a30608102431edc3373c0494020c060f11e2f7a"
   },
   {
    "name": "kanalen.mjs",
