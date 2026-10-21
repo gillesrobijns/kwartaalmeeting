@@ -1,10 +1,23 @@
 {
- "_uitleg": "Welk model doet wat. Ontbreekt een regel, dan Sonnet. Haiku pas na een test naast elkaar.",
- "claude": "claude-sonnet-5-5",
- "aap": "claude-sonnet-5-5",
- "breaking": "claude-sonnet-5-5",
- "auto": "claude-sonnet-5-5",
- "gemist": "claude-sonnet-5-5",
- "oordeel": "claude-sonnet-5-5",
+ "_uitleg": "Welk model doet wat. Ontbreekt een regel, dan Sonnet. Sinds 21 okt 2026 Opus overal ($100 API-krediet per maand via Max). effort = hoe diep Opus nadenkt (low/medium/high), alleen voor Opus. invoer = sterke lezing van transacties, invoer_snel = eerste lezing (zelfde model = één lezing).",
+ "claude": "claude-opus-5-5",
+ "aap": "claude-opus-5-5",
+ "breaking": "claude-opus-5-5",
+ "auto": "claude-opus-5-5",
+ "gemist": "claude-opus-5-5",
+ "oordeel": "claude-opus-5-5",
+ "beleggen": "claude-opus-5-5",
+ "invoer": "claude-opus-5-5",
+ "invoer_snel": "claude-opus-5-5",
+ "effort": {
+  "claude": "medium",
+  "gemist": "medium",
+  "beleggen": "medium",
+  "invoer": "medium",
+  "aap": "low",
+  "breaking": "low",
+  "auto": "low",
+  "oordeel": "low"
+ },
  "cache_history": true
 }
