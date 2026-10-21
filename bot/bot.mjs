@@ -37,7 +37,8 @@ const log = (...a) => console.log(new Date().toISOString().slice(0, 19), ...a);
 const anthropic = new Anthropic();                                // reads ANTHROPIC_API_KEY
 
 // ---------- which model does what (models.json, ships with the bot; missing = Sonnet everywhere) ----------
-// Features: claude, aap, breaking, auto (Duvel, verjaardag, krant), gemist, oordeel. Haiku only after a side-by-side test.
+// Features: claude, aap, breaking, auto (Duvel, verjaardag, krant), gemist, oordeel, beleggen (trader), invoer (invoer.mjs reads its own lines).
+// Opus everywhere since 21 Oct 2026 ($100 API credit per month with Max). Haiku only after a side-by-side test.
 function modelFor(feature) {
   try { const m = JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8'))[feature]; if (m) return m; } catch {}
   return CFG.model;
@@ -45,7 +46,24 @@ function modelFor(feature) {
 function cacheHistory() {                                         // models.json "cache_history": false turns the history cache off
   try { return JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8')).cache_history !== false; } catch { return true; }
 }
-const thinkingFor = (model) => (/haiku/.test(model) ? { type: 'disabled' } : { type: 'between_tools' });   // both think by default; Haiku 5.5 refuses between_tools, and with thinking on a short max_tokens returns no text
+// Sonnet and Haiku think by default and return no text on a short max_tokens. Haiku 5.5 refuses between_tools.
+// Opus 5.5 refuses every thinking setting (it always thinks): no thinking field, forModel() sets its effort instead.
+const thinkingFor = (model) => (/haiku/.test(model) ? { type: 'disabled' } : /opus/.test(model) ? undefined : { type: 'between_tools' });
+// Opus 5.5 (tested 21 Oct 2026): refuses thinking.type between_tools/disabled and forced tool_choice, and with max_tokens 300
+// it spent everything on thinking and returned no text. So for Opus, on every call from every module: drop those fields,
+// set the effort per feature (models.json "effort" overrides) and give max_tokens a floor. Length comes from the persona, not max_tokens.
+const EFFORT_DEFAULT = { claude: 'medium', gemist: 'medium', beleggen: 'medium', invoer: 'medium', aap: 'low', breaking: 'low', auto: 'low', oordeel: 'low' };
+function forModel(body, feature) {
+  if (!/opus/.test(String(body.model))) return body;
+  const b = { ...body };
+  delete b.thinking;
+  if (b.tool_choice && b.tool_choice.type !== 'auto' && b.tool_choice.type !== 'none') delete b.tool_choice;
+  let eff = EFFORT_DEFAULT[feature] || 'medium';
+  try { eff = JSON.parse(readFileSync(join(HERE, 'models.json'), 'utf8')).effort?.[feature] || eff; } catch {}
+  if (!b.output_config?.effort) b.output_config = { ...(b.output_config || {}), effort: eff };
+  b.max_tokens = Math.max(b.max_tokens || 0, 2000);
+  return b;
+}
 
 // ---------- cost per feature and model (data/usage_models.json), read with /kosten ----------
 const USAGE_MODELS_FILE = join(DATA_DIR, 'usage_models.json');
@@ -85,9 +103,11 @@ function trackUsage(feature, model, u = {}) {
 }
 { const create = anthropic.messages.create.bind(anthropic.messages);    // every call, from every module, is counted
   anthropic.messages.create = async (req, opts) => {
-    const { _feature, ...body } = req;
+    const { _feature, ...raw } = req;
+    const feature = _feature || featureFromStack();
+    const body = forModel(raw, feature);
     const res = await create(body, opts);
-    try { trackUsage(_feature || featureFromStack(), body.model, res.usage); } catch {}
+    try { trackUsage(feature, body.model, res.usage); } catch {}
     return res;
   }; }
 function costReport() {
@@ -1108,6 +1128,16 @@ const shortDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('nl
 
 const DIGEST_SEARCHES = 4;                                        // stocks that get a reason (one web search each, biggest drops first); one search for all of them found nothing
 
+// Opus sometimes adds a note in brackets after its answer ("(Ik vond geen nieuws over een daling …)", seen 21 Oct 2026).
+// The group never sees such a line. A reason counts only if no line says "onbekend".
+const dropNotes = (t) => String(t || '').split('\n').filter((l) => !/^\s*\(.*\)\s*$/.test(l)).join('\n').trim();
+function reasonOf(text) {
+  const lines = dropNotes(text).split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.some((l) => /^onbekend\b/i.test(l))) return '';
+  const t = (lines.pop() || '').replace(/[*_"]/g, '').replace(/\.$/, '').trim();
+  return t.split(/\s+/).length > 16 ? '' : t;
+}
+
 // Why did this stock drop? One small call with one web search, no persona (cheap). '' when nothing is found.
 async function dropReason(x, date) {
   const content = `Waarom sloot ${stockLabel(x.stock)} (ticker ${x.ticker}) op ${date} ${pct1(x.pct)} lager? Zoek het op het web. ` +
@@ -1123,8 +1153,7 @@ async function dropReason(x, date) {
         messages,
       });
       if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
-      const t = finalText(res.content).split('\n').pop().replace(/[*_"]/g, '').replace(/\.$/, '').trim();
-      return /^onbekend\b/i.test(t) || t.split(/\s+/).length > 16 ? '' : t;
+      return reasonOf(finalText(res.content));
     }
   } catch (e) { log('digest reason failed:', x.ticker, e.message); }
   return '';
@@ -1162,7 +1191,7 @@ async function digestExtras(d) {
       system: [{ type: 'text', text: persona, cache_control: { type: 'ephemeral' } }],   // no club data: the line may only use what is in the message
       messages: [{ role: 'user', content }],
     });
-    slot = finalText(res.content).replace(/^["“]|["”]$/g, '').trim();
+    slot = dropNotes(finalText(res.content)).replace(/^["“]|["”]$/g, '').trim();
   } catch (e) { log('digest closing line failed:', e.message); }
   return { markt: marketLine(d.indices), redenen, slot };
 }
@@ -1200,7 +1229,7 @@ async function composeBreaking(hits) {
         tools: [{ type: 'web_search_20260318', name: 'web_search', max_uses: 1 }],
         messages,
       });
-      let text = finalText(res.content);
+      let text = dropNotes(finalText(res.content));
       if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
       const at = text.indexOf('🚨');                               // the model sometimes writes a sentence about its search first: cut it off
       if (at > 0) text = text.slice(at).trim();
@@ -1249,7 +1278,7 @@ pdfLib = await import('./pdf.mjs').catch((e) => { log('pdf module not loaded:', 
 const traderMod = await import('./trader.mjs').catch((e) => { log('trader module not loaded:', e.message); return null; });
 if (traderMod) {
   trader = traderMod.createTrader({
-    dir: HERE, dataDir: DATA_DIR, log, anthropic, model: CFG.model, persona,
+    dir: HERE, dataDir: DATA_DIR, log, anthropic, model: modelFor('beleggen'), persona,
     clubSummary: () => club.summary,
     clubNames: () => { try { return JSON.parse(readFileSync(join(HERE, 'tickers.json'), 'utf8')); } catch { return {}; } },
   });
