@@ -1113,7 +1113,7 @@ start();
 const pct1 = (p) => `${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p).toFixed(1).replace('.', ',')}%`;
 const NAME_SUFFIX = new Set(['CORP', 'INC', 'NV', 'SA', 'AG', 'PLC', 'SE']);
 const LABEL_KEEP = new Set(['ASML', 'MSCI', 'SPDR', 'IWDA', 'VWCE', 'VWRL', 'NYSE', 'USA', 'ETF']);
-const LABEL_FIX = { XFAB: 'X-FAB', INBEV: 'InBev', ISHARES: 'iShares', SPACEX: 'SpaceX', NVIDIA: 'Nvidia' };
+const LABEL_FIX = { XFAB: 'X-FAB', INBEV: 'InBev', ISHARES: 'iShares', SPACEX: 'SpaceX', NVIDIA: 'Nvidia', MDXHEALTH: 'MDxHealth', '21SHARES': '21Shares' };
 function stockLabel(s) {                                          // "APPLIED DIGITAL CORP" -> "Applied Digital", "ASM INTERNATIONAL" -> "ASM International"
   const w = String(s).trim().split(/\s+/);
   if (w.length > 1 && NAME_SUFFIX.has(w[w.length - 1].toUpperCase())) w.pop();
@@ -1126,7 +1126,7 @@ function dayLabel(date, today) {
 }
 const shortDate = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(/\./g, '');
 
-const DIGEST_SEARCHES = 4;                                        // stocks that get a reason (one web search each, biggest drops first); one search for all of them found nothing
+const DIGEST_SEARCHES = 4;                                        // stocks that get a reason (one web search each, biggest moves up or down first); one search for all of them found nothing
 
 // Opus sometimes adds a note in brackets after its answer ("(Ik vond geen nieuws over een daling …)", seen 21 Oct 2026).
 // The group never sees such a line. A reason counts only if no line says "onbekend".
@@ -1138,9 +1138,9 @@ function reasonOf(text) {
   return t.split(/\s+/).length > 16 ? '' : t;
 }
 
-// Why did this stock drop? One small call with one web search, no persona (cheap). '' when nothing is found.
+// Why did this stock move? One small call with one web search, no persona (cheap). '' when nothing is found.
 async function dropReason(x, date) {
-  const content = `Waarom sloot ${stockLabel(x.stock)} (ticker ${x.ticker}) op ${date} ${pct1(x.pct)} lager? Zoek het op het web. ` +
+  const content = `Waarom sloot ${stockLabel(x.stock)} (ticker ${x.ticker}) op ${date} ${pct1(Math.abs(x.pct)).replace('+', '')} ${x.pct < 0 ? 'lager' : 'hoger'}? Zoek het op het web. ` +
     'Antwoord met hoogstens tien woorden in het Nederlands, zonder het aandeel of het percentage te herhalen en zonder punt. ' +
     'Vind je geen nieuws over die dag, antwoord dan alleen: onbekend. Verzin niets.';
   const messages = [{ role: 'user', content }];
@@ -1171,15 +1171,17 @@ function marketLine(indices) {
 
 // Claude adds the reasons and one closing line; the numbers, names and market sentence come from the code.
 async function digestExtras(d) {
-  const top = d.drops.slice(0, DIGEST_SEARCHES);
+  const rises = d.rises || [];
+  const top = [...d.drops, ...rises].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, DIGEST_SEARCHES);
   const found = await Promise.all(top.map((x) => dropReason(x, d.date)));
   const redenen = Object.fromEntries(top.map((x, i) => [stockLabel(x.stock).toLowerCase(), found[i]]));
-  const count = Object.entries(d.drops.flatMap((x) => x.holders).reduce((a, h) => ((a[h] = (a[h] || 0) + 1), a), {})).map(([h, n]) => `${h} ${n}`).join(', ');
+  const count = (list) => Object.entries(list.flatMap((x) => x.holders).reduce((a, h) => ((a[h] = (a[h] || 0) + 1), a), {})).map(([h, n]) => `${h} ${n}`).join(', ');
+  const rows = (list) => list.map((x) => `${stockLabel(x.stock)} ${pct1(x.pct)} (${x.holders.join(', ')})${redenen[stockLabel(x.stock).toLowerCase()] ? `: ${redenen[stockLabel(x.stock).toLowerCase()]}` : ''}`).join('\n');
   const content =
     `Ochtendbericht in de groep over de beursdag van ${dayLabel(d.date, d.today).toLowerCase()} (${d.date}). Dit staat er al in:\n` +
-    `${d.drops.map((x) => `${stockLabel(x.stock)} ${pct1(x.pct)} (${x.holders.join(', ')})${redenen[stockLabel(x.stock).toLowerCase()] ? `: ${redenen[stockLabel(x.stock).toLowerCase()]}` : ''}`).join('\n')}\n` +
-    `Per houder, aantal aandelen in die lijst: ${count}.\n` +
-    (d.best ? `Lichtpuntje: ${stockLabel(d.best.stock)} ${pct1(d.best.pct)} (${d.best.holders.join(', ')}).\n` : '') +
+    (d.drops.length ? `Slotkoers 5% of meer lager:\n${rows(d.drops)}\nPer houder, aantal dalers in die lijst: ${count(d.drops)}.\n` : '') +
+    (rises.length ? `Slotkoers 5% of meer hoger:\n${rows(rises)}\nPer houder, aantal stijgers in die lijst: ${count(rises)}.\n` : '') +
+    (d.best && !rises.length ? `Lichtpuntje: ${stockLabel(d.best.stock)} ${pct1(d.best.pct)} (${d.best.holders.join(', ')}).\n` : '') +
     `\nHet bericht komt de ochtend erna, dus het gaat over ${dayLabel(d.date, d.today).toLowerCase()}, niet over vandaag. ` +
     'Schrijf de slotzin: één droge, korte zin, mag een steek naar een houder zijn. Gebruik alleen de gegevens hierboven, ' +
     'nooit bedragen, posities of de ranking, en herhaal geen percentages. Schrijf alleen die zin.';
@@ -1200,27 +1202,36 @@ async function composeDigest(d) {
   const ex = await digestExtras(d);
   const reasons = Object.fromEntries(Object.entries(ex.redenen || {}).map(([k, v]) => [k.replace(/\(.*?\)/g, '').toLowerCase().trim(), String(v || '').trim().replace(/\.$/, '')]));
   const head = [`☕ *${dayLabel(d.date, d.today)} op de beurs* (${shortDate(d.date)})`, String(ex.markt || '').trim(), d.indices.map((i) => `${i.name} ${pct1(i.pct)}`).join(' · ')].filter(Boolean).join('\n');
-  const drops = d.drops.map((x) => {
+  const bullets = (list) => list.map((x) => {
     const label = stockLabel(x.stock), r = reasons[label.toLowerCase()];
     return `• ${label} ${pct1(x.pct)} (${x.holders.join(', ')})${r ? `: ${r}` : ''}`;
-  });
-  let text = `${head}\n\n📉 *Slotkoers 5% of meer lager*\n${drops.join('\n')}`;
-  if (d.best) text += `\n\n🌱 Lichtpuntje: ${stockLabel(d.best.stock)} ${pct1(d.best.pct)} (${d.best.holders.join(', ')})`;
+  }).join('\n');
+  const rises = d.rises || [];
+  let text = head;
+  if (d.drops.length) text += `\n\n📉 *Slotkoers 5% of meer lager*\n${bullets(d.drops)}`;
+  if (rises.length) text += `\n\n📈 *Slotkoers 5% of meer hoger*\n${bullets(rises)}`;
+  else if (d.best) text += `\n\n🌱 Lichtpuntje: ${stockLabel(d.best.stock)} ${pct1(d.best.pct)} (${d.best.holders.join(', ')})`;   // a 📈 list already shows the best riser
   if (ex.slot) text += `\n\n${String(ex.slot).trim()}`;
   return text;
 }
 
-// Live crash alert: a club stock 15%+ below the previous close, once per stock per day.
-async function composeBreaking(hits) {
-  const lines = hits.map((x) => `${x.stock}: ${x.pct.toFixed(1).replace('.', ',')}% vandaag (in de portefeuille van ${x.holders.join(', ')})`);
-  const fallback = `🚨 ${hits.map((x) => `*${stockLabel(x.stock)}* ${pct1(x.pct)}`).join(', ')}. Sterkte, ${[...new Set(hits.flatMap((x) => x.holders))].join(', ')}.`;
+// Live alert: a club stock 15%+ below (🚨) or 20%+ above (🚀, 23 Oct 2026) the previous close, once per stock per day.
+async function composeBreaking(hits, up = false) {
+  const icon = up ? '🚀' : '🚨';
+  const lines = hits.map((x) => `${x.stock}: ${pct1(x.pct)} vandaag (in de portefeuille van ${x.holders.join(', ')})`);
+  const fallback = `${icon} ${hits.map((x) => `*${stockLabel(x.stock)}* ${pct1(x.pct)}`).join(', ')}. ${up ? 'Proficiat' : 'Sterkte'}, ${[...new Set(hits.flatMap((x) => x.holders))].join(', ')}.`;
   try {
-    const messages = [{ role: 'user', content:
-      `Koersalarm. Deze aandelen uit de club staan vandaag 15% of meer lager dan de vorige slotkoers:\n${lines.join('\n')}\n\n` +
-      'Schrijf één kort breaking-news bericht voor de groep: begin met 🚨, noem het aandeel, de daling en de houders bij naam. ' +
-      'Zoek op het web waarom het daalt en zeg het in een halve zin als je het vindt. Vind je niets, zeg dan gewoon dat de reden nog niet bekend is en verzin niets. ' +
-      'Vertel nooit dat of hoe vaak je zocht. ' +
-      'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
+    const messages = [{ role: 'user', content: up
+      ? `Koersalarm. Deze aandelen uit de club staan vandaag 20% of meer hoger dan de vorige slotkoers:\n${lines.join('\n')}\n\n` +
+        'Schrijf één kort breaking-news bericht voor de groep: begin met 🚀, noem het aandeel, de stijging en de houders bij naam. ' +
+        'Zoek op het web waarom het stijgt en zeg het in een halve zin als je het vindt. Vind je niets, zeg dan gewoon dat de reden nog niet bekend is en verzin niets. ' +
+        'Vertel nooit dat of hoe vaak je zocht. ' +
+        'Hoogstens 3 zinnen. Een droge steek naar de houders mag (wie trakteert?), maar geen bedragen. Schrijf alleen het bericht.'
+      : `Koersalarm. Deze aandelen uit de club staan vandaag 15% of meer lager dan de vorige slotkoers:\n${lines.join('\n')}\n\n` +
+        'Schrijf één kort breaking-news bericht voor de groep: begin met 🚨, noem het aandeel, de daling en de houders bij naam. ' +
+        'Zoek op het web waarom het daalt en zeg het in een halve zin als je het vindt. Vind je niets, zeg dan gewoon dat de reden nog niet bekend is en verzin niets. ' +
+        'Vertel nooit dat of hoe vaak je zocht. ' +
+        'Hoogstens 3 zinnen. Een vleugje zwarte humor mag, maar lach niemand uit. Schrijf alleen het bericht.' }];
     for (let round = 0; round < 3; round++) {
       const model = modelFor('breaking');
       const res = await anthropic.messages.create({
@@ -1231,9 +1242,9 @@ async function composeBreaking(hits) {
       });
       let text = dropNotes(finalText(res.content));
       if (res.stop_reason === 'pause_turn') { messages.push({ role: 'assistant', content: res.content }); continue; }
-      const at = text.indexOf('🚨');                               // the model sometimes writes a sentence about its search first: cut it off
+      const at = text.indexOf(icon);                               // the model sometimes writes a sentence about its search first: cut it off
       if (at > 0) text = text.slice(at).trim();
-      return text ? (text.startsWith('🚨') ? text : `🚨 ${text}`) : fallback;
+      return text ? (text.startsWith(icon) ? text : `${icon} ${text}`) : fallback;
     }
   } catch (e) { log('breaking compose failed:', e.message); }
   return fallback;
@@ -1249,7 +1260,7 @@ if (pw) {
   pw.startPriceWatch({
     dir: HERE, dataDir: DATA_DIR, log,
     holders: () => club.holders || {},
-    announce: async (hits) => toGroups(asClaude(await composeBreaking(hits))),
+    announce: async (hits, dirn) => toGroups(asClaude(await composeBreaking(hits, dirn === 'up'))),
     announceDigest: pw.buildDigest ? async (d) => toGroups(asClaude(await composeDigest(d))) : undefined,
   });
   // /ochtend (Gilles, private): preview of the morning message for the last trading day; posts nothing in the group.
@@ -1257,8 +1268,8 @@ if (pw) {
     if (!pw.buildDigest) return sock.sendMessage(to, { text: CLAUDE_TAG + 'De nieuwe koersmodule is nog niet binnen. Probeer over tien minuten opnieuw.' });
     const d = await pw.buildDigest({ dir: HERE, holders: club.holders || {}, log });
     if (!d || !d.checked) return sock.sendMessage(to, { text: CLAUDE_TAG + 'Geen koersen gevonden. Probeer later opnieuw.' });
-    const text = d.drops.length ? await composeDigest(d)
-      : `Op ${shortDate(d.date)} sloot geen enkel clubaandeel 5% of meer lager, dus de groep kreeg die ochtend niets.\n${d.indices.map((i) => `${i.name} ${pct1(i.pct)}`).join(' · ')}`;
+    const text = d.drops.length || (d.rises || []).length ? await composeDigest(d)
+      : `Op ${shortDate(d.date)} sloot geen enkel clubaandeel 5% of meer lager of hoger, dus de groep kreeg die ochtend niets.\n${d.indices.map((i) => `${i.name} ${pct1(i.pct)}`).join(' · ')}`;
     await sock.sendMessage(to, { text: `👀 Voorbeeld, alleen voor jou:\n\n${asClaude(text)}` });
   };
   log('price watch started');
