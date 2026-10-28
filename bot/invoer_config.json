@@ -1,3 +1,49 @@
 {
-  "webapp_url": "https://script.google.com/macros/s/AKfycbynsJGE4oN9iRQzCsdyn6BAz-7tuLhMyMdqTAbzllblM8yM21Vp6v6QmyvX4iyRwk2gwg/exec"
+ "webapp_url": "https://script.google.com/macros/s/AKfycbynsJGE4oN9iRQzCsdyn6BAz-7tuLhMyMdqTAbzllblM8yM21Vp6v6QmyvX4iyRwk2gwg/exec",
+ "opvolgen": [
+  {
+   "id": "haakon-revolut-20261028",
+   "lid": "Haakon",
+   "tot": "2026-11-04",
+   "intro": "Dag Haakon, sorry voor het gedoe gisteravond. Ik heb mijn instellingen intussen aangepast: ik herken nu zelf dat EUNL op Revolut hetzelfde fonds is als MSCI WORLD van de club, dus je hoeft niets meer te kiezen of op te zoeken. Je screenshots van gisteren heb ik opnieuw verwerkt. De geannuleerde verkoop van 23 juni en de transacties die op allebei je screenshots stonden, tel ik niet mee.",
+   "slot": "Had je vóór 2 juni ook al zo'n aankoop? Stuur die screenshot dan na je *ja*.",
+   "rijen": [
+    {
+     "type": "Buy",
+     "aandeel": "MSCI WORLD",
+     "aantal": 0.97016735,
+     "totaal_eur": 120,
+     "datum": "2026-06-02"
+    },
+    {
+     "type": "Buy",
+     "aandeel": "MSCI WORLD",
+     "aantal": 0.9573195,
+     "totaal_eur": 120,
+     "datum": "2026-07-02"
+    },
+    {
+     "type": "Buy",
+     "aandeel": "MSCI WORLD",
+     "aantal": 0.94611108,
+     "totaal_eur": 120,
+     "datum": "2026-08-04"
+    },
+    {
+     "type": "Buy",
+     "aandeel": "MSCI WORLD",
+     "aantal": 0.93261832,
+     "totaal_eur": 120,
+     "datum": "2026-10-01"
+    },
+    {
+     "type": "Buy",
+     "aandeel": "MSCI WORLD",
+     "aantal": 0.91522709,
+     "totaal_eur": 120,
+     "datum": "2026-10-08"
+    }
+   ]
+  }
+ ]
 }
