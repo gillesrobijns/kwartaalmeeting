@@ -64,6 +64,7 @@ const TOOL = {
             datum: { type: ['string', 'null'], description: 'Uitvoerings- of betaaldatum als YYYY-MM-DD. Ontbreekt het jaar: het jongste jaar dat niet in de toekomst ligt. null als er geen datum is.' },
             kandidaten: { type: 'array', items: { type: 'string' }, description: 'Alleen bij twijfel: tot 3 namen uit de AANDELENLIJST die kunnen passen. Leeg als het zeker één naam is.' },
             isin: { type: ['string', 'null'], description: 'De ISIN (2 letters + 10 tekens) als die op de afbeelding of in het bericht staat, anders null.' },
+            ticker: { type: ['string', 'null'], description: 'De beurscode zoals op de afbeelding of in het bericht (bv. EUNL, IWDA, ASML), anders null. Niet zelf bedenken.' },
           },
           required: ['type', 'aandeel', 'in_lijst', 'aantal', 'totaal_eur', 'munt_gezien', 'datum'],
         },
@@ -85,6 +86,8 @@ const RULES = `Je leest transacties uit berichten van leden van een beleggingscl
   `Roep altijd de tool "transacties" aan, ook als er geen transactie in staat.\n\n` +
   `Regels:\n` +
   `- Eén rij per transactie. Een screenshot met meerdere transacties geeft meerdere rijen.\n` +
+  `- Een geannuleerde, geweigerde of nog niet uitgevoerde order (bv. "Geannuleerd", "Cancelled", "Mislukt", "In behandeling", een doorstreept bedrag) is geen transactie: laat die weg.\n` +
+  `- Overlappen twee screenshots (dezelfde transactie staat op beide), neem die transactie maar één keer.\n` +
   `- Buy = aankoop, Sell = verkoop, Dividend = ontvangen dividend.\n` +
   `- totaal_eur is het TOTAAL in euro, niet de koers per aandeel. Bij een aankoop: inclusief makelaarsloon en beurstaks. Bij een verkoop: wat er netto binnenkwam. Bij dividend: het netto bedrag na roerende voorheffing.\n` +
   `- Staat het totaal alleen in een andere munt (bv. dollar), zet totaal_eur op null en munt_gezien op die munt. Reken zelf NIET om.\n` +
@@ -198,7 +201,20 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   // ---------- controles vóór het voorstel ----------
   const UP = (x) => String(x || '').trim().toUpperCase();
   const ISIN_RE = /\b([A-Z]{2}[A-Z0-9]{9}[0-9])\b/;
-  const FLAGS = ['keuze_ok', 'dup_ok', 'prijs_ok', 'bezit_ok', 'force', 'nieuw'];
+  function isinOk(s) {                                             // controlecijfer (Luhn): vangt tikfouten en toevallige woorden
+    if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(s || '')) return false;
+    const d = s.split('').map((c) => (/[A-Z]/.test(c) ? String(c.charCodeAt(0) - 55) : c)).join('');
+    let sum = 0;
+    for (let i = 0; i < d.length; i++) { let n = +d[d.length - 1 - i]; if (i % 2 === 1) { n *= 2; if (n > 9) n -= 9; } sum += n; }
+    return sum % 10 === 0;
+  }
+  function findIsin(text) {                                        // "IE00b4l5y983", "IE00 B4L5 Y983" of een ISIN in een zin
+    const t = UP(text);
+    for (const w of t.split(/[^A-Z0-9]+/)) if (isinOk(w)) return w;
+    const flat = t.replace(/[\s.-]/g, '');
+    return flat.length <= 14 && isinOk((flat.match(/[A-Z]{2}[A-Z0-9]{9}[0-9]/) || [])[0]) ? flat.match(/[A-Z]{2}[A-Z0-9]{9}[0-9]/)[0] : null;
+  }
+  const FLAGS = ['keuze_ok', 'dup_ok', 'prijs_ok', 'bezit_ok', 'force', 'nieuw', 'nieuw_wacht', 'herkend', 'id_tried', 'leesnaam'];
   const dayDiff = (a, b) => Math.abs((new Date(`${a}T12:00:00Z`) - new Date(`${b}T12:00:00Z`)) / 864e5);
   const GENERIC = new Set(['ISHARES', 'AMUNDI', 'XTRACKERS', 'VANGUARD', 'SPDR', 'LYXOR', 'INVESCO', 'WISDOMTREE', 'VANECK', 'FRANKLIN', 'MSCI', 'FTSE', 'ETF', 'UCITS', 'ACC', 'DIST', 'GLOBAL', 'WORLD', 'INDEX', 'FUND', 'CORP', 'INC', 'GROUP', 'HOLDING', 'HOLDINGS', 'THE', 'AND', 'CLASS']);
   const toks = (x) => UP(x).replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
@@ -206,10 +222,107 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
   function normalize(r) {                                          // namen gelijkzetten met de lijst, in_lijst door de code laten bepalen
     const byUp = new Map(stockList().map((n) => [UP(n), n]));
     for (const x of r.rijen || []) {
+      x.leesnaam ||= x.aandeel;                                    // de naam zoals op de screenshot: daarop groeperen we de vragen
       const hit = byUp.get(UP(x.aandeel));
       if (hit) { x.aandeel = hit; x.in_lijst = true; } else if (!x.nieuw) x.in_lijst = false;
-      if (x.isin) { const m = UP(x.isin).replace(/\s/g, '').match(ISIN_RE); x.isin = m ? m[1] : null; }
+      if (x.isin) { const m = UP(x.isin).replace(/\s/g, '').match(ISIN_RE); x.isin = m && isinOk(m[1]) ? m[1] : null; }
+      if (x.ticker) x.ticker = UP(x.ticker).replace(/[^A-Z0-9.]/g, '') || null;
     }
+    // Twee screenshots die overlappen: dezelfde transactie maar één keer (het model doet dat niet altijd zelf).
+    const seen = new Set();
+    const before = (r.rijen || []).length;
+    r.rijen = (r.rijen || []).filter((x) => {
+      const k = [x.type, UP(x.leesnaam), x.aantal, x.totaal_eur, x.datum].join('|');
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+    if (r.rijen.length < before) r.dubbel_weg = (r.dubbel_weg || 0) + before - r.rijen.length;
+  }
+
+  // ---------- welk fonds is het? (ISIN of beurscode tegen de fondsen van de club) ----------
+  // Leden kopen hetzelfde fonds onder een andere naam of beurscode (Revolut toont EUNL, de club kent het als MSCI WORLD = IWDA).
+  // Eerst de beurscode zelf, dan Yahoo: de ISIN of beurscode opzoeken en de volledige fondsnaam vergelijken met die van de club.
+  const ROOT = (s) => UP(s).split('.')[0];
+  const NORM = (s) => UP(s).replace(/[^A-Z0-9]/g, '');
+  const yCache = new Map();
+  async function yjson(url) {
+    const c = yCache.get(url);
+    if (c && Date.now() - c.at < 6 * 3600 * 1000) return c.v;
+    let v = null;
+    try { const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }); if (res.ok) v = await res.json(); }
+    catch (e) { log('invoer yahoo:', e.message); }
+    yCache.set(url, { at: Date.now(), v });
+    return v;
+  }
+  const ySearch = async (q) => (await yjson(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`))?.quotes || [];
+  const yLong = async (sym) => { const m = (await yjson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1d`))?.chart?.result?.[0]?.meta; return m?.longName || null; };
+  function clubTickers() { try { return JSON.parse(readFileSync(join(hereDir, 'tickers.json'), 'utf8')); } catch { return {}; } }
+  function rootWord(text) {                                        // een beurscode van de club in vrije tekst ("Iwda op Revolut")
+    const byRoot = new Map(Object.entries(clubTickers()).map(([n, t]) => [ROOT(t), n]));
+    // minstens 4 tekens en geen gewoon woord: "die" (D'Ieteren), "bel" of "fast" mogen niets kiezen
+    const WORDS = new Set(['FAST', 'LOCK', 'HACK', 'VOLT', 'SEMI', 'CHIP']);
+    for (const w of UP(text).split(/[^A-Z0-9]+/)) if (w.length >= 4 && !WORDS.has(w) && byRoot.has(w)) return { name: byRoot.get(w), code: w };
+    return null;
+  }
+  async function identify({ isin, ticker }) {                      // -> { name, how } of null
+    const club = clubTickers();
+    const byRoot = new Map(Object.entries(club).map(([n, t]) => [ROOT(t), n]));
+    if (ticker && byRoot.has(ROOT(ticker))) return { name: byRoot.get(ROOT(ticker)), how: ROOT(ticker) };
+    const longs = new Set();
+    if (isin) for (const q of await ySearch(isin)) {
+      if (byRoot.has(ROOT(q.symbol))) return { name: byRoot.get(ROOT(q.symbol)), how: isin };
+      if (q.longname) longs.add(NORM(q.longname));
+    }
+    if (ticker) {                                                  // alleen de eerste notering met precies die code (EUNL -> EUNL.DE)
+      const q = (await ySearch(ROOT(ticker))).find((y) => ROOT(y.symbol) === ROOT(ticker) && y.longname);
+      if (q) longs.add(NORM(q.longname));
+    }
+    if (!longs.size) return null;
+    const fits = new Set();                                        // fondsen van de club waarvan elk woord in de volledige naam staat
+    for (const l of longs) for (const n of Object.keys(club)) { const t = toks(n); if (t.length && t.every((w) => l.includes(w))) fits.add(n); }
+    for (const n of [...fits].sort((a, b) => toks(b).length - toks(a).length).slice(0, 12)) {   // dan de volledige naam vergelijken
+      const ln = await yLong(club[n]);
+      if (ln && longs.has(NORM(ln))) return { name: n, how: isin || ROOT(ticker) };
+    }
+    return null;
+  }
+  const sameFund = (r, x) => r.rijen.filter((y) => UP(y.leesnaam || y.aandeel) === UP(x.leesnaam || x.aandeel));
+  function pickFund(r, x, name, how = null) {                      // een keuze geldt voor alle rijen met dat fonds
+    for (const y of sameFund(r, x)) {
+      y.aandeel = name; y.in_lijst = true; y.keuze_ok = true; y.nieuw = false; y.nieuw_wacht = false; delete y.kandidaten;
+      if (how) y.herkend = how;
+    }
+  }
+  function newFund(r, x, isin) {
+    for (const y of sameFund(r, x)) {
+      if (isin) { y.isin = isin; y.nieuw = true; y.in_lijst = false; y.keuze_ok = true; y.nieuw_wacht = false; }
+      else y.nieuw_wacht = true;
+    }
+  }
+  const ISIN_HELP = 'De ISIN staat in je broker-app op de pagina van het fonds zelf (niet bij de transactie), meestal onder de details of "Over". Een screenshot van die pagina mag ook, net als een foto van een zoekresultaat waarop de ISIN staat.';
+  const ID_TOOL = {
+    name: 'fonds',
+    description: 'Geef de ISIN, beurscode en naam van het fonds of aandeel dat je op de afbeelding ziet.',
+    input_schema: { type: 'object', properties: {
+      isin: { type: ['string', 'null'], description: 'ISIN (2 letters + 10 tekens) zoals op de afbeelding, anders null.' },
+      ticker: { type: ['string', 'null'], description: 'Beurscode zoals op de afbeelding, anders null.' },
+      naam: { type: ['string', 'null'], description: 'Naam van het fonds of aandeel zoals op de afbeelding, anders null.' },
+    }, required: ['isin', 'ticker', 'naam'] },
+  };
+  async function readId(imgs, text) {                              // een foto als antwoord op "welk fonds?" of "stuur de ISIN"
+    const content = imgs.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } }));
+    content.push({ type: 'text', text: `Het lid stuurt deze afbeelding om te tonen welk fonds of aandeel hij bedoelt${text ? ` (bijschrift: "${text}")` : ''}. De foto kan scheef, gedraaid of een foto van een scherm zijn: lees ze zoals ze is. Neem alleen over wat je echt ziet staan; kun je iets niet lezen, zet het op null. Roep de tool aan.` });
+    const req = { model: MODELS.strong, max_tokens: 600, tools: [ID_TOOL], messages: [{ role: 'user', content }] };
+    if (/haiku/.test(MODELS.strong)) req.tool_choice = { type: 'any' };
+    else if (/sonnet/.test(MODELS.strong)) req.thinking = { type: 'between_tools' };
+    try {
+      const res = await anthropic.messages.create(req);
+      track(MODELS.strong, res.usage);
+      const b = (res.content || []).find((c) => c.type === 'tool_use');
+      if (!b) return null;
+      const m = UP(b.input.isin).replace(/[\s.-]/g, '').match(/([A-Z]{2}[A-Z0-9]{9}[0-9])/);
+      return { isin: m ? m[1] : null, ticker: b.input.ticker ? UP(b.input.ticker) : null, naam: b.input.naam || null };
+    } catch (e) { log('invoer foto-id:', e.message); return null; }
   }
   function candidates(x) {
     const list = stockList();
@@ -247,7 +360,11 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     } catch (e) { log('invoer koers:', stock, e.message); }
     return null;
   }
-  const rowTag = (r, i) => (r.rijen.length > 1 ? ` (rij ${i + 1})` : '');
+  const rowTag = (r, i) => {                                       // "(aankoop van 04/08/2026)" in plaats van "(rij 3)": dat zegt het lid iets
+    const x = r.rijen[i];
+    return r.rijen.length > 1 && x ? ` (${(TYPE_NL[x.type] || x.type).toLowerCase()} van ${dmy(x.datum)})` : '';
+  };
+  const FUND_RE = /ISHARES|AMUNDI|XTRACKERS|VANGUARD|SPDR|ETF|MSCI|FTSE|INVESCO|WISDOMTREE|VANECK|UCITS/;
   const sheetLine = (h, isDiv) => (isDiv
     ? `Dividend · ${h.stock} · ${dmy(h.date)}`
     : `${TYPE_NL[h.type] || h.type} · ${num(h.qty)} × ${h.stock} · ${dmy(h.date)}`);
@@ -262,18 +379,35 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       if (x.keuze_ok) continue;
       const opts = candidates(x);
       if (x.in_lijst && opts.length < 2) { x.keuze_ok = true; continue; }
+      if (!x.id_tried) {                                           // eerst zelf opzoeken: beurscode of ISIN van een fonds dat de club al heeft
+        for (const y of sameFund(r, x)) y.id_tried = true;
+        const code = x.ticker || (String(x.leesnaam).match(/\(([A-Z0-9]{2,6})\)\s*$/) || [])[1] || null;
+        const hit = rootWord(x.leesnaam) && { name: rootWord(x.leesnaam).name, how: rootWord(x.leesnaam).code }
+          || ((x.isin || code) ? await identify({ isin: x.isin, ticker: code }) : null);
+        if (hit) { pickFund(r, x, hit.name, hit.how); continue; }
+      }
       p.idx = i;
+      const n = sameFund(r, x).length;
+      const many = n > 1 ? ` (${n} transacties)` : '';
+      const fund = FUND_RE.test(UP(x.leesnaam)) || opts.some((o) => FUND_RE.test(o));
+      const kind = fund ? 'fonds' : 'aandeel';
+      if (x.nieuw_wacht && !x.isin) {
+        p.stage = 'isin';
+        return `Nieuw voor de club. Stuur de ISIN van *${x.leesnaam}* (12 tekens, staat op de pagina van het ${kind} in je broker-app), dan kan de maandagscan de koers vinden.`;
+      }
       if (opts.length) {
         p.stage = 'keuze'; p.opts = opts;
-        const fund = opts.some((n) => /ISHARES|AMUNDI|XTRACKERS|VANGUARD|SPDR|ETF|MSCI|FTSE|INVESCO|WISDOMTREE|VANECK/.test(n));
-        return `Welk ${fund ? 'fonds' : 'aandeel'} bedoel je${rowTag(r, i)}?${x.in_lijst ? '' : ` (op je ${images.get(jid) ? 'screenshot' : 'bericht'}: ${x.aandeel})`}\n` +
-          opts.map((n, k) => `${k + 1}. ${n}`).join('\n') + `\n${opts.length + 1}. Een nieuw ${fund ? 'fonds' : 'aandeel'} voor de club\n\nAntwoord met het nummer.`;
+        return `Welk ${kind} bedoel je${x.in_lijst ? rowTag(r, i) : ` met *${x.leesnaam}*`}${many}?\n` +
+          opts.map((o, k) => `${k + 1}. ${o}`).join('\n') + `\n${opts.length + 1}. Een nieuw ${kind} voor de club\n\nAntwoord met het nummer.`;
       }
       p.stage = 'isin';
       return x.isin
-        ? `${x.aandeel}${rowTag(r, i)} staat nog niet in de lijst van de club. Is het een nieuw aandeel (ISIN ${x.isin})? Antwoord *nieuw*, of zeg welk aandeel uit de lijst je bedoelt.`
-        : `${x.aandeel}${rowTag(r, i)} staat nog niet in de lijst van de club. Is het nieuw, stuur dan de ISIN (12 tekens, staat bij de details in je broker-app), dan kan de maandagscan de koers vinden. Bedoel je een aandeel uit de lijst, zeg dan welk.`;
+        ? `*${x.leesnaam}*${many} staat nog niet in de lijst van de club. Is het een nieuw ${kind} (ISIN ${x.isin})? Antwoord *nieuw*, of zeg welk ${kind} uit de lijst je bedoelt.`
+        : `*${x.leesnaam}*${many} staat nog niet in de lijst van de club. Is het nieuw, stuur dan de ISIN (12 tekens, staat op de pagina van het ${kind} in je broker-app), dan kan de maandagscan de koers vinden. Bedoel je een ${kind} uit de lijst, zeg dan welk.`;
     }
+    // Het fonds is gekozen of door de code herkend: een vraag van het model over welk fonds het is, valt dan weg.
+    const settled = r.rijen.filter((x) => x.herkend || x.id_tried).flatMap((x) => [x.aandeel, x.leesnaam, x.ticker, x.isin]).filter(Boolean).map(UP);
+    r.onduidelijk = (r.onduidelijk || []).filter((q) => !(settled.some((s) => UP(q).includes(s)) && /fonds|onder|bedoel|zelfde|dist|acc/i.test(q)));
     if (problems(r).length) { p.stage = 'voorstel'; return proposal(p.member, r); }   // eerst aanvullen, dan controleren
 
     if (p.sheet === undefined) p.sheet = (await sheetRows(p.member)) || false;
@@ -314,19 +448,26 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     p.stage = 'voorstel';
     return proposal(p.member, r);
   }
-  async function step(jid, p, prefix = '') {
+  async function step(jid, p, prefix = '', suffix = '') {
     await typing(jid);
-    const msg = await advance(jid, p);
+    const msg = (await advance(jid, p)) + suffix;
+    p.vraag = msg;                                                 // om de open vraag te herhalen na een wedervraag
     p.at = Date.now();
     state.pending[jid] = p;
     saveState();
     await send(jid, prefix + msg);
   }
   const carry = (oldR, newR) => {                                  // beslissingen van het lid bewaren na een correctie
+    const used = new Set();
     for (const [i, y] of (newR.rijen || []).entries()) {
-      const x = oldR?.rijen?.[i];
-      if (!x || UP(x.aandeel) !== UP(y.aandeel) || x.type !== y.type) continue;
-      for (const f of ['keuze_ok', 'nieuw', 'isin']) if (x[f] && !y[f]) y[f] = x[f];
+      // zelfde rij = zelfde type en datum en dezelfde naam (de gekozen naam of de naam van de screenshot); anders dezelfde plaats
+      const same = (x) => x && x.type === y.type && [UP(x.aandeel), UP(x.leesnaam)].includes(UP(y.aandeel));
+      let x = (oldR?.rijen || []).find((o, k) => !used.has(k) && same(o) && o.datum === y.datum);
+      if (!x && same(oldR?.rijen?.[i]) && !used.has(i)) x = oldR.rijen[i];
+      if (!x) continue;
+      used.add(oldR.rijen.indexOf(x));
+      if (x.keuze_ok && x.in_lijst && UP(y.aandeel) !== UP(x.aandeel)) { y.aandeel = x.aandeel; y.in_lijst = true; }   // gekozen fonds houden
+      for (const f of ['keuze_ok', 'nieuw', 'isin', 'nieuw_wacht', 'herkend', 'leesnaam', 'id_tried']) if (x[f] && !y[f]) y[f] = x[f];
       if (x.aantal === y.aantal && x.totaal_eur === y.totaal_eur && x.datum === y.datum) for (const f of ['dup_ok', 'force', 'prijs_ok', 'bezit_ok']) if (x[f]) y[f] = x[f];
     }
     return newR;
@@ -532,12 +673,37 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
     }
     saveState();
   }
+  // ---------- opvolging (invoer_config.json "opvolgen") ----------
+  // Gilles laat de bot zelf een voorstel sturen aan een lid, bv. nadat de bot een gesprek verknoeide. Eén keer per id,
+  // alleen aan een gekoppeld nummer, tussen 9 en 21 uur, tot de datum "tot". Het voorstel gaat door dezelfde controles
+  // (dubbel, prijs, bezit) en schrijft pas na *ja* van het lid.
+  // { "id": "…", "lid": "Haakon", "intro": "…", "slot": "…", "tot": "JJJJ-MM-DD", "rijen": [{ "type", "aandeel", "aantal", "totaal_eur", "datum" }] }
+  state.followed ||= {};
+  async function followUps(hour = +bxNow().slice(11, 13)) {
+    if (hour < 9 || hour >= 21) return;
+    for (const f of config().opvolgen || []) {
+      if (!f?.id || !f.lid || !(f.rijen || []).length || state.followed[f.id] || (f.tot && today() > f.tot)) continue;
+      const jid = Object.keys(state.members).find((j) => state.members[j] === f.lid);
+      if (!jid) continue;                                          // nummer nog niet gekoppeld: wachten
+      const r = { is_transactie: true, zekerheid: 1, onduidelijk: [], rijen: f.rijen.map((x) => ({ in_lijst: true, munt_gezien: 'EUR', ...x })) };
+      delete state.pending[jid];
+      try {
+        await step(jid, { member: f.lid, r, tries: 0 }, f.intro ? `${f.intro}\n\n` : '', f.slot ? `\n\n${f.slot}` : '');
+        state.followed[f.id] = new Date().toISOString(); saveState();
+        log('invoer opvolging verstuurd:', f.id);
+        const a = adminJid();
+        if (a && a !== jid) getSock().sendMessage(a, { text: claudeTag + `📨 Opvolging "${f.id}" is naar ${f.lid} gestuurd. Na zijn *ja* staat het in zijn sheet.` }).catch(() => {});
+      } catch (e) { log('invoer opvolging:', f.id, e.message); }
+    }
+  }
+
   let busy = false;
   async function tick() {
     if (busy) return;
     busy = true;
     try {
       const now = bxNow(), hour = +now.slice(11, 13), day = now.slice(0, 10);
+      await followUps(hour).catch((e) => log('invoer opvolging:', e.message));
       try {
         const feed = await (await fetch(FEED_URL, { headers: { 'cache-control': 'no-cache' } })).json();
         const sc = feed?.duvel?.scanned_at;
@@ -580,11 +746,17 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       const what = x.type === 'Dividend'
         ? `${TYPE_NL[x.type]} · ${x.aandeel} · ${x.totaal_eur > 0 ? eur(x.totaal_eur) : '?'} · ${dmy(x.datum)}`
         : `${TYPE_NL[x.type]} · ${x.aantal > 0 ? num(x.aantal) : '?'} × ${x.aandeel} · ${x.totaal_eur > 0 ? eur(x.totaal_eur) : '?'} · ${dmy(x.datum)}`;
-      return `${r.rijen.length > 1 ? `${i + 1}. ` : ''}${what}${x.in_lijst ? '' : ` (nieuw voor de club${x.isin ? `, ISIN ${x.isin}` : ''})`}`;
+      const first = r.rijen.findIndex((y) => !y.in_lijst && UP(y.aandeel) === UP(x.aandeel)) === i;   // "nieuw voor de club" één keer per fonds
+      return `${r.rijen.length > 1 ? `${i + 1}. ` : ''}${what}${x.in_lijst || !first ? '' : ` (nieuw voor de club${x.isin ? `, ISIN ${x.isin}` : ''})`}`;
     });
     const pr = problems(r);
     const ask = pr.length ? pr : (r.onduidelijk || []).slice(0, 3);
     let t = `Dit zet ik in de sheet van ${member}:\n${lines.join('\n')}`;
+    const label = (x) => (UP(x.leesnaam) !== UP(x.aandeel) ? x.leesnaam : x.ticker || x.herkend);
+    const notes = [...new Map(r.rijen.filter((x) => x.herkend && UP(label(x)) !== UP(x.aandeel))
+      .map((x) => [x.aandeel, `${label(x)} op je screenshot is hetzelfde fonds als *${x.aandeel}* van de club, dus ik zet het als ${x.aandeel} in je sheet.`])).values()];
+    if (r.dubbel_weg) notes.push(`${r.dubbel_weg === 1 ? 'Eén transactie stond' : `${r.dubbel_weg} transacties stonden`} op beide screenshots; die tel ik maar één keer.`);
+    if (notes.length) t += `\n\n${notes.join('\n')}`;
     if (pr.length) t += `\n\nNog even checken:\n${ask.map((q) => `• ${q}`).join('\n')}\n\nAntwoord gewoon met wat ontbreekt.`;
     else if (ask.length) t += `\n\nNog even checken:\n${ask.map((q) => `• ${q}`).join('\n')}\n\nKlopt alles? Antwoord *ja*, of zeg wat er anders moet.`;
     else t += `\n\nKlopt dit? Antwoord *ja*, of zeg wat er anders moet. *stop* om te annuleren.`;
@@ -694,27 +866,52 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       if (NO.test(raw)) { delete state.pending[jid]; saveState(); await send(jid, 'Oké, niets ingegeven.'); return true; }
       const x = pending.r.rijen[pending.idx];
       if (!x) { delete state.pending[jid]; saveState(); return false; }
+      if (pending.stage === 'keuze' || pending.stage === 'isin') {
+        const r = pending.r;
+        // Een ISIN als antwoord: hoort ze bij een fonds dat de club al heeft, dan dat fonds; anders nieuw. Geldt voor alle rijen van dat fonds.
+        const byIsin = async (isin, intro = '') => {
+          const hit = await identify({ isin });
+          if (hit) { pickFund(r, x, hit.name, isin); await step(jid, pending, `${intro}Dat is *${hit.name}*: dat fonds heeft de club al, dus ik zet het daaronder.\n\n`); return true; }
+          newFund(r, x, isin); await step(jid, pending, intro); return true;
+        };
+        if (imgs.length) {                                         // een foto als antwoord: de ISIN of beurscode erop lezen
+          if (!budgetOk(jid)) { await send(jid, 'Genoeg gelezen voor vandaag. Morgen weer, of zet het zelf in je sheet.'); return true; }
+          spend(jid); await typing(jid);
+          const id = await readId(imgs, raw);
+          if (id?.isin && isinOk(id.isin)) return byIsin(id.isin, `Op je foto staat ISIN ${id.isin}.\n\n`);
+          const hit = id?.ticker ? await identify({ ticker: id.ticker }) : null;
+          if (hit) { pickFund(r, x, hit.name, ROOT(id.ticker)); await step(jid, pending, `${ROOT(id.ticker)} is *${hit.name}* van de club.\n\n`); return true; }
+          await send(jid, `Ik zie geen ISIN op die foto. ${ISIN_HELP}\n\n${pending.vraag || ''}`.trim()); return true;
+        }
+        const isin = findIsin(raw);
+        if (isin) return byIsin(isin);
+        if (/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(UP(raw).replace(/[\s.-]/g, ''))) {
+          await send(jid, 'Die ISIN klopt niet: er staat een teken verkeerd. Kijk ze nog eens na, of stuur een screenshot van de pagina van het fonds.'); return true;
+        }
+        const rw = rootWord(raw);                                  // een beurscode van de club in de tekst ("3. Iwda op Revolut")
+        if (rw) { pickFund(r, x, rw.name, rw.code); await step(jid, pending, `${rw.code} is *${rw.name}* van de club.\n\n`); return true; }
+        if (/\?\s*$/.test(raw) || /^\s*(waar|hoe|wat|waarom|welk|welke|wanneer|kan|moet)\b/i.test(raw)) {   // een wedervraag: antwoorden, keuze niet kwijt
+          await send(jid, `${ISIN_HELP}\n\n${pending.vraag || ''}`.trim()); return true;
+        }
+      }
       if (pending.stage === 'keuze') {
         const n = (raw.match(/^\s*(\d)\b/) || [])[1];
         const byName = pending.opts.find((o) => UP(raw) === UP(o) || (UP(raw).length >= 4 && UP(o).includes(UP(raw))));
         if ((n && +n === pending.opts.length + 1) || /\bnieuw/i.test(raw)) {
-          if (x.isin) { x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
-          pending.stage = 'isin'; pending.at = Date.now(); saveState();
-          await send(jid, 'Nieuw voor de club. Stuur de ISIN (12 tekens, staat bij de details in je broker-app), dan kan de maandagscan de koers vinden.');
-          return true;
+          newFund(pending.r, x, x.isin || null);                   // zonder ISIN vraagt advance() ze nu één keer voor dat fonds
+          await step(jid, pending); return true;
         }
         const pick = n && +n >= 1 && +n <= pending.opts.length ? pending.opts[+n - 1] : byName;
-        if (pick) { x.aandeel = pick; x.in_lijst = true; x.keuze_ok = true; delete x.kandidaten; await step(jid, pending); return true; }
+        if (pick) { pickFund(pending.r, x, pick); await step(jid, pending); return true; }
+        if (n && raw.trim().length <= 3) { await send(jid, `Antwoord met een nummer van 1 tot ${pending.opts.length + 1}.\n\n${pending.vraag || ''}`.trim()); return true; }
         return correct(jid, pending, raw);
       }
       if (pending.stage === 'isin') {
-        const m = UP(raw).replace(/[\s.-]/g, '').match(/([A-Z]{2}[A-Z0-9]{9}[0-9])/);
         const byUp = new Map(stockList().map((s) => [UP(s), s]));
-        if (m) { x.isin = m[1]; x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
-        if (x.isin && (YES.test(raw) || /\bnieuw/i.test(raw))) { x.nieuw = true; x.in_lijst = false; x.keuze_ok = true; await step(jid, pending); return true; }
-        if (byUp.has(UP(raw))) { x.aandeel = byUp.get(UP(raw)); x.in_lijst = true; x.keuze_ok = true; await step(jid, pending); return true; }
+        if (x.isin && (YES.test(raw) || /\bnieuw/i.test(raw))) { newFund(pending.r, x, x.isin); await step(jid, pending); return true; }
+        if (byUp.has(UP(raw))) { pickFund(pending.r, x, byUp.get(UP(raw))); await step(jid, pending); return true; }
         if (raw.split(/\s+/).length <= 3 && !/\d/.test(raw)) {
-          await send(jid, 'Dat is geen ISIN. Een ISIN heeft 12 tekens: 2 letters en dan 10 cijfers of letters, bv. IE00BMC38736. Stuur de ISIN, zeg welk aandeel uit de lijst je bedoelt, of *stop*.');
+          await send(jid, `Dat is geen ISIN. Een ISIN heeft 12 tekens: 2 letters en dan 10 cijfers of letters, bv. IE00BMC38736. ${ISIN_HELP} Of zeg welk fonds uit de lijst je bedoelt, of *stop*.`);
           return true;
         }
         return correct(jid, pending, raw);
@@ -826,6 +1023,6 @@ export function createInvoer({ anthropic, getSock, log, dataDir, hereDir, adminJ
       `\nWebapp: ${config().webapp_url ? 'ingesteld' : 'nog niet ingesteld'}`;
   }
 
-  return { handle, report, tick, MODELS, _internals: { read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendJob, scanReceipts, tick,
+  return { handle, report, tick, MODELS, _internals: { followUps, identify, rootWord, findIsin, isinOk, read, problems, proposal, readSmart, needsStrong, advance, candidates, normalize, sheetRows, refPrice, state, positionsCheck, dividendJob, scanReceipts, tick,
     virt, send, step, write, budgetOk, spend, saveState, token, config, stockList, holdings, YES, NO, UP, eur, num, dmy, TYPE_NL, MEMBERS } };
 }
