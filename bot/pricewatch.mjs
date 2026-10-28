@@ -1,16 +1,18 @@
 // Koersen, two jobs (8 Oct 2026, replaces the 5%-step breaking news on Gilles' request):
 // 1. Morning message (from 08:30 Brussels): the last completed trading day on CLOSING prices.
-//    Club stocks that closed 5% or more lower (with who holds them), the indices, and the best riser.
-//    By 08:30 Europe and the US have both closed, so one check covers both. Posted only when at least
-//    one club stock closed 5%+ lower; quiet days stay silent. Each trading day is reported once.
-// 2. Crash alert: every 15 minutes 08:00-22:00, a club stock 15%+ below the previous close is reported
-//    once that day, live. Max 2 messages a day.
+//    Club stocks that closed 5% or more lower AND 5% or more higher (with who holds them), the indices,
+//    and the best riser. By 08:30 Europe and the US have both closed, so one check covers both. Posted only
+//    when at least one club stock closed 5%+ lower or higher (risers added 23 Oct 2026; before that only
+//    drops triggered it); quiet days stay silent. Each trading day is reported once.
+// 2. Live alert: every 15 minutes 08:00-22:00, a club stock 15%+ below (crash, 🚨) or 20%+ above (rally, 🚀,
+//    added 23 Oct 2026) the previous close is reported once per stock per direction that day. Max 2 messages a day.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const DIGEST_DROP = 5;      // percent, close to close
 export const CRASH_DROP = 15;      // percent, live, versus the previous close
+export const RALLY_RISE = 20;      // percent, live, versus the previous close
 const DIGEST_FROM = 8 * 60 + 30;   // 08:30 Brussels
 const DIGEST_UNTIL = 12 * 60;      // not after noon (a late restart should not post a stale morning message)
 const CRASH_EVERY_MS = 15 * 60 * 1000;
@@ -118,39 +120,45 @@ export async function buildDigest({ dir, holders, today = brusselsDate(), log = 
   }
   moves.sort((a, b) => a.pct - b.pct);
   const drops = moves.filter((m) => m.pct <= -DIGEST_DROP);
+  const rises = moves.filter((m) => m.pct >= DIGEST_DROP).reverse();  // biggest riser first
   const best = moves.length && moves[moves.length - 1].pct > 0 ? moves[moves.length - 1] : null;
-  return { date, today, indices, drops, best, checked: moves.length };
+  return { date, today, indices, drops, rises, best, checked: moves.length };
 }
 
 export function startPriceWatch({ dir, dataDir, log, holders, announce, announceDigest }) {
   const stateFile = join(dataDir, 'pricewatch.json');
   let state = {};
   try { state = JSON.parse(readFileSync(stateFile, 'utf8')); } catch {}
-  state = { crash: state.crash || {}, sent: state.sent || {}, digest: state.digest || {} };
+  state = { crash: state.crash || {}, rally: state.rally || {}, sent: state.sent || {}, digest: state.digest || {} };
   const save = () => writeFileSync(stateFile, JSON.stringify(state));
 
   async function crashTick() {
     const { date: today, minutes } = bxl();
     if (minutes < 8 * 60 || minutes >= 22 * 60) return;              // quiet hours
     if ((state.sent[today] || 0) >= MAX_CRASH_PER_DAY) return;
-    const hits = [];
+    const hits = [], ups = [];
     for (const h of heldTickers(dir, holders())) {
       let q;
       try { q = await quote(h.ticker); } catch { continue; }
       const key = `${h.ticker}|${q.marketDay}`;
       if (q.marketDay === today && q.pct <= -CRASH_DROP && !state.crash[key]) {
         state.crash[key] = 1;
-        hits.push({ stock: h.stock, pct: q.pct, holders: h.holders, today: true });
+        hits.push({ stock: h.stock, ticker: h.ticker, pct: q.pct, holders: h.holders, today: true });
+      }
+      if (q.marketDay === today && q.pct >= RALLY_RISE && !state.rally[key]) {
+        state.rally[key] = 1;
+        ups.push({ stock: h.stock, ticker: h.ticker, pct: q.pct, holders: h.holders, today: true });
       }
       await pause(250);
     }
     const weekAgo = brusselsDate(new Date(Date.now() - 7 * 864e5));
-    for (const k of Object.keys(state.crash)) if (k.split('|')[1] < weekAgo) delete state.crash[k];
-    if (hits.length) {
+    for (const m of [state.crash, state.rally]) for (const k of Object.keys(m)) if (k.split('|')[1] < weekAgo) delete m[k];
+    for (const d of Object.keys(state.sent)) if (d !== today) delete state.sent[d];
+    for (const [list, dirn] of [[hits, 'down'], [ups, 'up']]) {
+      if (!list.length || (state.sent[today] || 0) >= MAX_CRASH_PER_DAY) continue;
       state.sent[today] = (state.sent[today] || 0) + 1;
-      for (const d of Object.keys(state.sent)) if (d !== today) delete state.sent[d];
-      log(`crash alert: ${hits.map((x) => `${x.stock} ${x.pct.toFixed(1)}%`).join(', ')}`);
-      try { await announce(hits); } catch (e) { log('crash announce failed:', e.message); }
+      log(`${dirn === 'up' ? 'rally' : 'crash'} alert: ${list.map((x) => `${x.stock} ${x.pct.toFixed(1)}%`).join(', ')}`);
+      try { await announce(list, dirn); } catch (e) { log(`${dirn === 'up' ? 'rally' : 'crash'} announce failed:`, e.message); }
     }
     save();
   }
@@ -165,8 +173,8 @@ export function startPriceWatch({ dir, dataDir, log, holders, announce, announce
     if (state.digest.done === d.date || stale) { save(); return; }    // e.g. Monday: Friday was reported on Saturday
     state.digest.done = d.date;
     save();
-    log(`morning digest ${d.date}: ${d.drops.length} drops of ${d.checked} stocks`);
-    if (d.drops.length) { try { await announceDigest(d); } catch (e) { log('digest announce failed:', e.message); } }
+    log(`morning digest ${d.date}: ${d.drops.length} drops, ${(d.rises || []).length} rises of ${d.checked} stocks`);
+    if (d.drops.length || (d.rises || []).length) { try { await announceDigest(d); } catch (e) { log('digest announce failed:', e.message); } }
   }
 
   setTimeout(() => crashTick().catch((e) => log('pricewatch:', e.message)), 60 * 1000);
