@@ -72,6 +72,58 @@ export function createPipeline({ hereDir, dataDir, log = console.log }) {
   };
   const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
+  function startJob(req) {
+    const id = String(req.id || '').replace(/[^a-zA-Z0-9_.-]/g, '');
+    if (!id) throw new Error('start needs an id');
+    if (running.has(id)) throw new Error(`job ${id} is still running`);
+    const [exe, args] = resolveCmd(req.cmd);
+    const out = openSync(join(JOBS, id + '.out'), 'w'), err = openSync(join(JOBS, id + '.err'), 'w');
+    const child = spawn(exe, args, { cwd: inPipe(req.cwd || '.'), env: childEnv(req.env, req.withApiKey), stdio: ['ignore', out, err] });
+    closeSync(out); closeSync(err);
+    const meta = { id, cmd: req.cmd, pid: child.pid, state: 'running', started: new Date().toISOString() };
+    const save = () => writeFileSync(join(JOBS, id + '.json'), JSON.stringify(meta, null, 1));
+    save();
+    running.set(id, child);
+    const limit = Math.min(Number(req.timeout || 3600), 4 * 3600) * 1000;
+    const timer = setTimeout(() => { meta.state = 'timeout'; child.kill('SIGTERM'); }, limit);
+    child.on('error', (e) => { meta.state = 'failed'; meta.error = e.message; save(); log(`pipeline job ${id}: ${e.message}`); });
+    child.on('exit', (code, signal) => {
+      clearTimeout(timer); running.delete(id);
+      if (meta.state === 'running') meta.state = code === 0 ? 'done' : 'failed';
+      Object.assign(meta, { code, signal, ended: new Date().toISOString() });
+      save();
+    });
+    return meta;
+  }
+
+  // ---------- schedule: pipeline/schedule.json = [{id, days:[1], time:"09:05", cmd, cwd, withApiKey, timeout, lateMinutes}] ----------
+  // days use 0=Sunday..6=Saturday, Brussels time. Each entry fires at most once per day; if the bot was down at that
+  // time it still fires up to lateMinutes (default 120) later, after that the day is skipped.
+  const SCHED = join(PIPE, 'schedule.json'), SSTATE = join(JOBS, 'schedule_state.json');
+  const brussels = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Brussels' }));
+  function tick() {
+    let list = [];
+    try { list = JSON.parse(readFileSync(SCHED, 'utf8')); } catch { return; }
+    let st = {};
+    try { st = JSON.parse(readFileSync(SSTATE, 'utf8')); } catch {}
+    const now = brussels(), ymd = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const mins = now.getHours() * 60 + now.getMinutes();
+    let changed = false;
+    for (const e of Array.isArray(list) ? list : []) {
+      if (!e || !e.id || !Array.isArray(e.days) || !/^\d\d:\d\d$/.test(e.time || '')) continue;
+      if (!e.days.includes(now.getDay()) || st[e.id] === ymd) continue;
+      const at = Number(e.time.slice(0, 2)) * 60 + Number(e.time.slice(3));
+      if (mins < at) continue;
+      st[e.id] = ymd; changed = true;
+      if (mins - at > (e.lateMinutes ?? 120)) { log(`pipeline schedule: ${e.id} skipped today (too late)`); continue; }
+      try { startJob({ id: `${e.id}-${ymd}`, cmd: e.cmd, cwd: e.cwd, withApiKey: !!e.withApiKey, timeout: e.timeout, env: e.env }); log(`pipeline schedule: started ${e.id}-${ymd}`); }
+      catch (err) { log(`pipeline schedule: ${e.id} failed to start: ${err.message}`); }
+    }
+    if (changed) writeFileSync(SSTATE, JSON.stringify(st, null, 1));
+  }
+  const timer = setInterval(() => { try { tick(); } catch (e) { log('pipeline schedule:', e.message); } }, 30 * 1000);
+  if (timer.unref) timer.unref();
+
   async function handle(req) {
     switch (req.op) {
       case 'ping': {
@@ -105,28 +157,7 @@ export function createPipeline({ hereDir, dataDir, log = console.log }) {
           { cwd: inPipe(req.cwd || '.'), env: childEnv(req.env, req.withApiKey), timeout, maxBuffer: 32 * 1024 * 1024 },
           (err, stdout, stderr) => ok({ code: err ? (err.code ?? (err.killed ? 'timeout' : 1)) : 0, stdout, stderr })));
       }
-      case 'start': {
-        const id = String(req.id || '').replace(/[^a-zA-Z0-9_.-]/g, '');
-        if (!id) throw new Error('start needs an id');
-        if (running.has(id)) throw new Error(`job ${id} is still running`);
-        const [exe, args] = resolveCmd(req.cmd);
-        const out = openSync(join(JOBS, id + '.out'), 'w'), err = openSync(join(JOBS, id + '.err'), 'w');
-        const child = spawn(exe, args, { cwd: inPipe(req.cwd || '.'), env: childEnv(req.env, req.withApiKey), stdio: ['ignore', out, err] });
-        closeSync(out); closeSync(err);
-        const meta = { id, cmd: req.cmd, pid: child.pid, state: 'running', started: new Date().toISOString() };
-        const save = () => writeFileSync(join(JOBS, id + '.json'), JSON.stringify(meta, null, 1));
-        save();
-        running.set(id, child);
-        const limit = Math.min(Number(req.timeout || 3600), 4 * 3600) * 1000;
-        const timer = setTimeout(() => { meta.state = 'timeout'; child.kill('SIGTERM'); }, limit);
-        child.on('exit', (code, signal) => {
-          clearTimeout(timer); running.delete(id);
-          if (meta.state === 'running') meta.state = code === 0 ? 'done' : 'failed';
-          Object.assign(meta, { code, signal, ended: new Date().toISOString() });
-          save();
-        });
-        return meta;
-      }
+      case 'start': return startJob(req);
       case 'poll': {
         const id = String(req.id || '').replace(/[^a-zA-Z0-9_.-]/g, '');
         const f = join(JOBS, id + '.json');
