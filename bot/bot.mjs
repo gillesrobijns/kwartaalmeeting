@@ -1321,11 +1321,14 @@ if (invoerMod) {
     log('kanalen started');
   }
 }
+const pipelineMod = await import('./pipeline.mjs').catch((e) => { log('pipeline module not loaded:', e.message); return null; });
+const pipeline = pipelineMod ? (() => { try { return pipelineMod.createPipeline({ hereDir: HERE, dataDir: DATA_DIR, log }); } catch (e) { log('pipeline not started:', e.message); return null; } })() : null;   // signed jobs from the laptop (pipeline on the server)
 await refreshClub();                                              // again, now with the bot portfolios
 
 // ---------- status page (http://<server-ip>:8080): pairing code while unpaired, nothing secret ----------
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 createServer(async (req, res) => {
+  if (pipeline && await pipeline.http(req, res).catch((e) => { log('pipeline http:', e.message); return false; })) return;
   if (kanalen && await kanalen.http(req, res).catch(() => false)) return;   // /api/koers for the phone form
   if (req.url.startsWith('/feed/ideas.json')) {                   // ideas and requests from members, for the roadmap backlog
     let body = '[]';
@@ -1365,6 +1368,7 @@ createServer(async (req, res) => {
     const as = autopost.status;
     extra += `<h2>Automatische berichten</h2><p>Laatste: ${esc(as.last || '-')}. Feed gelezen: ${esc(as.feedAt || '-')}${as.feedError ? ` <span style="color:#b45309">(${esc(as.feedError)})</span>` : ''}.</p>`;
   }
+  if (pipeline) extra += `<h2>Pipeline</h2><p>Klaar. Laatste opdracht: ${esc(pipeline.status.lastCall || '-')} ${esc(pipeline.status.lastOp || '')}.</p>`;
   res.end(`<!doctype html><meta name=viewport content="width=device-width"><title>Kwartaal-bot</title><body style="font-family:system-ui;padding:24px">${body}${extra}${STATUS.lastError && !STATUS.connected ? `<p style="color:#b45309">${STATUS.lastError}</p>` : ''}<p style="color:#888">Opgestart: ${STATUS.started}</p></body>`);
 }).listen(8080).on('error', (e) => log('status page:', e.message));
 
